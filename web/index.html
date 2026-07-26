@@ -1,0 +1,1401 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+<meta name="theme-color" content="#ffffff" />
+<title>Sheltr ESP</title>
+<style>
+  :root {
+    --background: #ffffff;
+    --foreground: #111111;
+    --muted: #f4f4f4;
+    --muted-foreground: #5c5c5c;
+    --border: #c9c9c9;
+    --card: #ffffff;
+    --primary: #171717;
+    --primary-foreground: #fafafa;
+    --emerald: #059669;
+    --emerald-soft: #10b981;
+    --rose: #e11d48;
+    --rose-soft: #fb7185;
+    --sky: #0284c7;
+    --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { min-height: 100%; }
+  body {
+    margin: 0;
+    background: var(--muted);
+    color: var(--foreground);
+    font-family: var(--font-sans);
+    font-size: 15px;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: inherit; }
+  h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
+
+  .shell { max-width: 80rem; margin: 0 auto; padding: 0 1rem 4rem; }
+  header.topbar {
+    position: sticky; top: 0; z-index: 20;
+    background: var(--background);
+    border-bottom: 2px solid var(--border);
+  }
+  .topbar-inner {
+    max-width: 80rem; margin: 0 auto; padding: 0.75rem 1rem;
+    display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
+  }
+  .brand { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; }
+  .brand h1 { font-size: 1.05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .brand span { font-size: 0.7rem; color: var(--muted-foreground); font-family: var(--font-mono); }
+  .spacer { flex: 1 1 auto; }
+
+  .chip {
+    display: inline-flex; align-items: center; gap: 0.4rem;
+    border: 2px solid var(--border); padding: 0.25rem 0.5rem;
+    font-size: 0.72rem; font-family: var(--font-mono); text-transform: uppercase;
+    background: var(--background);
+  }
+  .dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: #a3a3a3; }
+  .dot.on { background: var(--emerald); }
+  .dot.warn { background: #f59e0b; }
+  .dot.off { background: var(--rose); }
+
+  button, .btn {
+    font: inherit; font-weight: 600; cursor: pointer;
+    border: 2px solid var(--border); background: var(--background); color: var(--foreground);
+    padding: 0.4rem 0.7rem; border-radius: 0; line-height: 1.2;
+  }
+  button:hover { background: var(--muted); }
+  button:disabled { opacity: 0.45; cursor: not-allowed; }
+  button.primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+  button.primary:hover { background: #000; }
+  button.ghost { border-color: transparent; background: transparent; padding: 0.3rem; }
+  button.ghost:hover { background: var(--muted); }
+  button.small { font-size: 0.78rem; padding: 0.25rem 0.5rem; }
+  button.danger { border-color: var(--rose); color: var(--rose); }
+  button.danger:hover { background: #fff1f2; }
+
+  .tabs { display: flex; gap: 0; border: 2px solid var(--border); background: var(--background); }
+  .tabs button { border: none; border-right: 2px solid var(--border); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; }
+  .tabs button:last-child { border-right: none; }
+  .tabs button.active { background: var(--primary); color: var(--primary-foreground); }
+
+  section.panel { background: var(--background); border: 2px solid var(--border); padding: 1rem; margin-top: 1.25rem; }
+  section.panel > h2 {
+    font-size: 0.95rem; border-bottom: 2px solid var(--border);
+    padding-bottom: 0.6rem; margin-bottom: 0.9rem;
+  }
+  .section-title {
+    font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
+    letter-spacing: 0.18em; color: var(--muted-foreground); margin: 1.5rem 0 0.7rem;
+  }
+
+  .grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  @media (min-width: 640px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+  @media (min-width: 1024px) { .grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+  @media (min-width: 1280px) { .grid { grid-template-columns: repeat(6, minmax(0, 1fr)); } }
+
+  .tile { background: var(--card); border: 2px solid var(--border); padding: 0.7rem; display: flex; flex-direction: column; gap: 0.6rem; }
+  .tile-head { display: flex; align-items: flex-start; justify-content: space-between; gap: 0.25rem; }
+  .tile-title { font-size: 0.85rem; font-weight: 600; line-height: 1.2; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tile-sub { font-size: 0.7rem; color: var(--muted-foreground); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .tile-actions { display: flex; align-items: center; gap: 0.1rem; flex-shrink: 0; }
+  .row2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 0.5rem; }
+  .row3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 0.5rem; }
+  .row { display: flex; align-items: center; gap: 0.5rem; flex-wrap: wrap; }
+
+  .btn-on { border-color: var(--emerald-soft); color: #047857; }
+  .btn-on.active { background: var(--emerald); border-color: var(--emerald); color: #fff; }
+  .btn-off { border-color: var(--rose-soft); color: #be123c; }
+  .btn-off.active { background: var(--rose); border-color: var(--rose); color: #fff; }
+  .btn-sel.active { background: var(--primary); border-color: var(--primary); color: var(--primary-foreground); }
+
+  input[type="range"] { flex: 1; accent-color: var(--primary); height: 1.5rem; }
+  .level { font-variant-numeric: tabular-nums; font-weight: 700; min-width: 1.25rem; text-align: right; }
+  .temp { font-size: 1.85rem; font-weight: 700; font-variant-numeric: tabular-nums; line-height: 1; }
+  .temp small { font-size: 0.95rem; color: var(--muted-foreground); font-weight: 600; }
+  .setpoint { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 4rem; line-height: 1.1; }
+  .setpoint span:first-child { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted-foreground); }
+  .setpoint span:last-child { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; }
+  .pulse { animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+
+  .rooms { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+  .room-card { border: 2px solid var(--border); padding: 0.9rem; text-align: left; display: flex; flex-direction: column; gap: 0.35rem; }
+  .room-card strong { font-size: 0.95rem; }
+  .room-card small { font-size: 0.72rem; color: #3f3f3f; }
+
+  label { display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-foreground); margin-bottom: 0.25rem; }
+  input[type="text"], input[type="password"], input[type="number"], input[type="time"], select, textarea {
+    width: 100%; font: inherit; padding: 0.4rem 0.5rem; border: 2px solid var(--border);
+    background: var(--background); color: var(--foreground); border-radius: 0;
+  }
+  input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset: -2px; }
+  .field { margin-bottom: 0.75rem; }
+  .fields { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }
+  .switch { display: flex; align-items: center; gap: 0.5rem; }
+  .switch input { width: 1.1rem; height: 1.1rem; accent-color: var(--primary); }
+  .switch label { margin: 0; text-transform: none; letter-spacing: 0; font-size: 0.85rem; color: var(--foreground); }
+
+  table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  th, td { border: 1px solid var(--border); padding: 0.35rem 0.4rem; text-align: left; }
+  th { background: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; }
+  td input, td select { padding: 0.25rem 0.35rem; border-width: 1px; }
+
+  .board { border: 2px solid var(--border); padding: 0.85rem; margin-bottom: 1rem; }
+  .board-head { display: flex; justify-content: space-between; align-items: center; gap: 0.5rem; margin-bottom: 0.75rem; }
+  .muted { color: var(--muted-foreground); font-size: 0.8rem; }
+  .mono { font-family: var(--font-mono); font-size: 0.78rem; }
+  .kv { display: grid; grid-template-columns: minmax(8rem, auto) 1fr; gap: 0.3rem 0.75rem; font-size: 0.85rem; }
+  .kv dt { color: var(--muted-foreground); }
+  .kv dd { margin: 0; font-family: var(--font-mono); overflow-wrap: anywhere; }
+
+  .toast {
+    position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%);
+    background: var(--primary); color: var(--primary-foreground);
+    border: 2px solid var(--primary); padding: 0.55rem 0.9rem; font-size: 0.85rem;
+    max-width: min(92vw, 30rem); z-index: 60; display: none;
+  }
+  .toast.error { background: var(--rose); border-color: var(--rose); }
+  .toast.show { display: block; }
+
+  dialog {
+    border: 2px solid var(--border); padding: 0; background: var(--background); color: var(--foreground);
+    width: min(94vw, 34rem); max-height: 88vh;
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
+  .dialog-body { padding: 1rem; overflow-y: auto; max-height: calc(88vh - 4rem); }
+  .dialog-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding: 0.75rem 1rem; }
+  .days { display: flex; gap: 0.25rem; flex-wrap: wrap; }
+  .days button { font-size: 0.68rem; padding: 0.2rem 0.35rem; }
+  .days button.active { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
+  .entry { border: 2px solid var(--border); padding: 0.6rem; margin-bottom: 0.6rem; }
+
+  .center-card { max-width: 26rem; margin: 3rem auto; }
+  .hidden { display: none !important; }
+  .offline-overlay { opacity: 0.45; pointer-events: none; }
+  .banner { border: 2px solid #f59e0b; background: #fffbeb; padding: 0.6rem 0.75rem; font-size: 0.85rem; margin-top: 1rem; }
+</style>
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <h1 id="device-name">Sheltr ESP</h1>
+      <span id="device-id"></span>
+    </div>
+    <span class="chip" id="net-chip"><span class="dot" id="net-dot"></span><span id="net-text">…</span></span>
+    <span class="spacer"></span>
+    <div class="tabs" id="tabs">
+      <button data-view="control" class="active">Controllo</button>
+      <button data-view="config">Configurazione</button>
+      <button data-view="system">Sistema</button>
+    </div>
+    <button id="btn-refresh" title="Aggiorna stato dal bus">Aggiorna</button>
+    <button id="btn-logout" class="hidden small">Esci</button>
+  </div>
+</header>
+
+<main class="shell">
+  <!-- ------------------------------------------------------------ login -->
+  <div id="view-login" class="hidden">
+    <section class="panel center-card">
+      <h2>Accesso</h2>
+      <div class="field"><label for="login-user">Utente</label><input id="login-user" type="text" autocomplete="username" /></div>
+      <div class="field"><label for="login-pass">Password</label><input id="login-pass" type="password" autocomplete="current-password" /></div>
+      <button class="primary" id="btn-login">Entra</button>
+    </section>
+  </div>
+
+  <!-- ---------------------------------------------------------- controllo -->
+  <div id="view-control">
+    <div id="control-banner"></div>
+    <div id="rooms-nav" class="row" style="margin-top:1rem"></div>
+    <div id="control-body"></div>
+  </div>
+
+  <!-- ------------------------------------------------------ configurazione -->
+  <div id="view-config" class="hidden">
+    <section class="panel">
+      <h2>Dispositivo</h2>
+      <div class="fields">
+        <div class="field"><label for="cfg-name">Nome impianto</label><input id="cfg-name" type="text" /></div>
+        <div class="field"><label for="cfg-id">ID dispositivo</label><input id="cfg-id" type="text" /></div>
+        <div class="field"><label for="cfg-hostname">Hostname (dominio locale)</label><input id="cfg-hostname" type="text" placeholder="sheltr" /></div>
+      </div>
+      <p class="muted">Il dispositivo risponde su <span class="mono" id="cfg-mdns">http://sheltr.local</span></p>
+    </section>
+
+    <section class="panel">
+      <h2>Schede protocollo 1.6</h2>
+      <div id="boards"></div>
+      <button id="btn-add-board">+ Aggiungi scheda</button>
+    </section>
+
+    <section class="panel">
+      <h2>Bus seriale</h2>
+      <div class="fields">
+        <div class="field"><label for="cfg-bus-tx">GPIO TX</label><input id="cfg-bus-tx" type="number" min="-1" max="48" /></div>
+        <div class="field"><label for="cfg-bus-rx">GPIO RX</label><input id="cfg-bus-rx" type="number" min="-1" max="48" /></div>
+        <div class="field"><label for="cfg-bus-de">GPIO DE/RE (RS485, -1 se TTL)</label><input id="cfg-bus-de" type="number" min="-1" max="48" /></div>
+        <div class="field"><label for="cfg-bus-baud">Baudrate</label><input id="cfg-bus-baud" type="number" min="1200" max="115200" /></div>
+        <div class="field"><label for="cfg-bus-timeout">Timeout risposta (ms)</label><input id="cfg-bus-timeout" type="number" min="100" max="8000" /></div>
+        <div class="field"><label for="cfg-bus-retries">Tentativi extra</label><input id="cfg-bus-retries" type="number" min="0" max="5" /></div>
+        <div class="field"><label for="cfg-bus-poll">Polling automatico (s, 0 = off)</label><input id="cfg-bus-poll" type="number" min="0" max="3600" /></div>
+      </div>
+    </section>
+
+    <section class="panel">
+      <h2>MQTT Home Assistant</h2>
+      <div class="switch"><input id="cfg-mqtt-enabled" type="checkbox" /><label for="cfg-mqtt-enabled">Abilita client MQTT locale con discovery</label></div>
+      <div class="fields" style="margin-top:0.75rem">
+        <div class="field"><label for="cfg-mqtt-host">Broker</label><input id="cfg-mqtt-host" type="text" placeholder="192.168.1.10" /></div>
+        <div class="field"><label for="cfg-mqtt-port">Porta</label><input id="cfg-mqtt-port" type="number" min="1" max="65535" /></div>
+        <div class="field"><label for="cfg-mqtt-user">Utente</label><input id="cfg-mqtt-user" type="text" autocomplete="off" /></div>
+        <div class="field"><label for="cfg-mqtt-pass">Password</label><input id="cfg-mqtt-pass" type="password" autocomplete="new-password" /></div>
+        <div class="field"><label for="cfg-mqtt-base">Base topic</label><input id="cfg-mqtt-base" type="text" placeholder="sheltr" /></div>
+        <div class="field"><label for="cfg-mqtt-prefix">Prefisso discovery</label><input id="cfg-mqtt-prefix" type="text" placeholder="homeassistant" /></div>
+        <div class="field"><label for="cfg-mqtt-interval">Intervallo stati (s)</label><input id="cfg-mqtt-interval" type="number" min="5" max="3600" /></div>
+      </div>
+      <div class="switch"><input id="cfg-mqtt-discovery" type="checkbox" /><label for="cfg-mqtt-discovery">Pubblica la discovery Home Assistant</label></div>
+    </section>
+
+    <section class="panel">
+      <h2>Sheltr Cloud</h2>
+      <div class="switch"><input id="cfg-cloud-enabled" type="checkbox" /><label for="cfg-cloud-enabled">Collega questo dispositivo a un portale Sheltr Cloud</label></div>
+      <div class="fields" style="margin-top:0.75rem">
+        <div class="field"><label for="cfg-cloud-host">Broker cloud</label><input id="cfg-cloud-host" type="text" /></div>
+        <div class="field"><label for="cfg-cloud-port">Porta</label><input id="cfg-cloud-port" type="number" min="1" max="65535" /></div>
+        <div class="field"><label for="cfg-cloud-user">Utente</label><input id="cfg-cloud-user" type="text" autocomplete="off" /></div>
+        <div class="field"><label for="cfg-cloud-pass">Password</label><input id="cfg-cloud-pass" type="password" autocomplete="new-password" /></div>
+        <div class="field"><label for="cfg-cloud-instance">ID istanza</label><input id="cfg-cloud-instance" type="text" /></div>
+        <div class="field"><label for="cfg-cloud-instance-name">Nome istanza</label><input id="cfg-cloud-instance-name" type="text" /></div>
+        <div class="field"><label for="cfg-cloud-format">Formato payload</label>
+          <select id="cfg-cloud-format">
+            <option value="frame_hex_space_crlf">frame_hex_space_crlf</option>
+            <option value="frame_hex_space">frame_hex_space</option>
+            <option value="frame_hex_compact">frame_hex_compact</option>
+            <option value="frame_hex_compact_crlf">frame_hex_compact_crlf</option>
+          </select>
+        </div>
+      </div>
+      <p class="muted">Topic usati: <span class="mono" id="cfg-cloud-topics"></span></p>
+    </section>
+
+    <section class="panel">
+      <h2>Rete</h2>
+      <div class="switch"><input id="cfg-eth-enabled" type="checkbox" /><label for="cfg-eth-enabled">Ethernet W5500 attiva</label></div>
+      <div class="switch"><input id="cfg-dhcp" type="checkbox" /><label for="cfg-dhcp">Indirizzo automatico (DHCP)</label></div>
+      <div class="fields" id="static-fields" style="margin-top:0.75rem">
+        <div class="field"><label for="cfg-ip">IP statico</label><input id="cfg-ip" type="text" placeholder="192.168.1.50" /></div>
+        <div class="field"><label for="cfg-gateway">Gateway</label><input id="cfg-gateway" type="text" /></div>
+        <div class="field"><label for="cfg-subnet">Netmask</label><input id="cfg-subnet" type="text" placeholder="255.255.255.0" /></div>
+        <div class="field"><label for="cfg-dns1">DNS primario</label><input id="cfg-dns1" type="text" /></div>
+      </div>
+      <h3 style="margin-top:1rem;font-size:0.85rem">WiFi</h3>
+      <div class="fields">
+        <div class="field"><label for="cfg-wifi-ssid">Rete WiFi</label>
+          <div class="row">
+            <input id="cfg-wifi-ssid" type="text" list="wifi-list" style="flex:1" />
+            <button id="btn-scan" class="small">Cerca</button>
+          </div>
+          <datalist id="wifi-list"></datalist>
+        </div>
+        <div class="field"><label for="cfg-wifi-pass">Password WiFi</label><input id="cfg-wifi-pass" type="password" autocomplete="new-password" /></div>
+      </div>
+      <button id="btn-wifi-connect">Connetti ora</button>
+      <h3 style="margin-top:1rem;font-size:0.85rem">Hotspot di configurazione</h3>
+      <div class="fields">
+        <div class="field"><label for="cfg-ap-ssid">SSID hotspot</label><input id="cfg-ap-ssid" type="text" placeholder="Sheltr-XXXX" /></div>
+        <div class="field"><label for="cfg-ap-pass">Password hotspot (min 8)</label><input id="cfg-ap-pass" type="password" autocomplete="new-password" /></div>
+      </div>
+      <div class="switch"><input id="cfg-ap-fallback" type="checkbox" /><label for="cfg-ap-fallback">Apri l'hotspot se non c'è connettività</label></div>
+    </section>
+
+    <section class="panel">
+      <h2>Ora e sicurezza</h2>
+      <div class="fields">
+        <div class="field"><label for="cfg-ntp-server">Server NTP</label><input id="cfg-ntp-server" type="text" /></div>
+        <div class="field"><label for="cfg-ntp-tz">Fuso orario (POSIX TZ)</label><input id="cfg-ntp-tz" type="text" /></div>
+      </div>
+      <div class="switch"><input id="cfg-ntp-enabled" type="checkbox" /><label for="cfg-ntp-enabled">Sincronizza l'orologio via NTP (serve per i profili orari)</label></div>
+      <hr style="border:none;border-top:2px solid var(--border);margin:1rem 0" />
+      <div class="switch"><input id="cfg-auth-enabled" type="checkbox" /><label for="cfg-auth-enabled">Richiedi login per interfaccia e API</label></div>
+      <div class="fields" style="margin-top:0.75rem">
+        <div class="field"><label for="cfg-auth-user">Utente</label><input id="cfg-auth-user" type="text" autocomplete="off" /></div>
+        <div class="field"><label for="cfg-auth-pass">Password</label><input id="cfg-auth-pass" type="password" autocomplete="new-password" /></div>
+      </div>
+    </section>
+
+    <div class="row" style="margin-top:1.25rem">
+      <button class="primary" id="btn-save">Salva configurazione</button>
+      <button id="btn-reload-config">Ricarica</button>
+      <span class="muted" id="save-hint"></span>
+    </div>
+  </div>
+
+  <!-- --------------------------------------------------------------- sistema -->
+  <div id="view-system" class="hidden">
+    <section class="panel">
+      <h2>Stato del sistema</h2>
+      <dl class="kv" id="system-kv"></dl>
+    </section>
+    <section class="panel">
+      <h2>Bus e schede</h2>
+      <dl class="kv" id="bus-kv"></dl>
+      <table id="boards-status" style="margin-top:0.75rem"></table>
+    </section>
+    <section class="panel">
+      <h2>Diagnostica protocollo</h2>
+      <p class="muted">Invia un frame grezzo di 14 byte (esadecimale) e leggi la risposta della scheda.</p>
+      <div class="row">
+        <input id="frame-hex" type="text" class="mono" placeholder="49 01 40 00 00 00 00 00 00 00 00 00 00 46" style="flex:1;min-width:16rem" />
+        <button id="btn-frame">Invia</button>
+      </div>
+      <pre class="mono" id="frame-out" style="white-space:pre-wrap;margin-top:0.6rem"></pre>
+    </section>
+    <section class="panel">
+      <h2>Aggiornamento firmware</h2>
+      <p class="muted">Carica un file <span class="mono">firmware.bin</span> compilato per questa scheda. Il dispositivo si riavvia al termine.</p>
+      <div class="row">
+        <input id="ota-file" type="file" accept=".bin" />
+        <button id="btn-ota">Aggiorna</button>
+        <span class="muted" id="ota-status"></span>
+      </div>
+    </section>
+    <section class="panel">
+      <h2>Manutenzione</h2>
+      <div class="row">
+        <button id="btn-restart">Riavvia dispositivo</button>
+        <button class="danger" id="btn-factory">Ripristino configurazione</button>
+      </div>
+    </section>
+  </div>
+</main>
+
+<div class="toast" id="toast"></div>
+
+<dialog id="profile-dialog">
+  <div class="dialog-head">
+    <strong id="profile-title">Profilo orario</strong>
+    <button class="ghost" id="profile-close">✕</button>
+  </div>
+  <div class="dialog-body">
+    <div class="switch"><input id="profile-enabled" type="checkbox" /><label for="profile-enabled">Profilo attivo</label></div>
+    <div id="profile-entries" style="margin-top:0.75rem"></div>
+    <button id="profile-add" class="small">+ Aggiungi fascia</button>
+    <div class="row" style="margin-top:1rem">
+      <button class="primary" id="profile-save">Applica</button>
+      <span class="muted">Le modifiche vanno salvate con «Salva configurazione».</span>
+    </div>
+  </div>
+</dialog>
+
+<script>
+(() => {
+  "use strict";
+
+  const DAYS = [["LUN", 1], ["MAR", 2], ["MER", 3], ["GIO", 4], ["VEN", 5], ["SAB", 6], ["DOM", 7]];
+  const state = {
+    meta: null,
+    status: null,
+    config: null,
+    system: null,
+    view: "control",
+    room: null,
+    busy: new Set(),
+    profileTarget: null,
+    token: localStorage.getItem("sheltr_token") || "",
+  };
+
+  const $ = (id) => document.getElementById(id);
+  const el = (tag, className, text) => {
+    const node = document.createElement(tag);
+    if (className) node.className = className;
+    if (text !== undefined) node.textContent = text;
+    return node;
+  };
+
+  function toast(message, isError) {
+    const node = $("toast");
+    node.textContent = message;
+    node.className = "toast show" + (isError ? " error" : "");
+    clearTimeout(toast.timer);
+    toast.timer = setTimeout(() => { node.className = "toast"; }, isError ? 6000 : 2600);
+  }
+
+  async function api(path, options = {}) {
+    const init = { method: options.method || "GET", headers: {} };
+    if (state.token) init.headers["Authorization"] = "Bearer " + state.token;
+    if (options.body !== undefined) {
+      init.headers["Content-Type"] = "application/json";
+      init.body = JSON.stringify(options.body);
+    }
+    const response = await fetch(path, init);
+    const text = await response.text();
+    let data = {};
+    if (text) {
+      try { data = JSON.parse(text); } catch (error) { data = { raw: text }; }
+    }
+    if (response.status === 401) {
+      state.meta = Object.assign({}, state.meta, { authRequired: true, authenticated: false });
+      showLogin();
+      throw new Error(data.error || "Autenticazione richiesta");
+    }
+    if (!response.ok) throw new Error(data.error || ("Errore HTTP " + response.status));
+    return data;
+  }
+
+  // ------------------------------------------------------------- navigazione
+
+  function setView(view) {
+    state.view = view;
+    for (const name of ["control", "config", "system"]) {
+      $("view-" + name).classList.toggle("hidden", name !== view);
+    }
+    $("view-login").classList.add("hidden");
+    for (const button of $("tabs").querySelectorAll("button")) {
+      button.classList.toggle("active", button.dataset.view === view);
+    }
+    if (view === "config" && !state.config) loadConfig();
+    if (view === "system") loadSystem();
+  }
+
+  function showLogin() {
+    for (const name of ["control", "config", "system"]) $("view-" + name).classList.add("hidden");
+    $("view-login").classList.remove("hidden");
+  }
+
+  // ------------------------------------------------------------------ header
+
+  function renderHeader() {
+    const meta = state.meta || {};
+    $("device-name").textContent = meta.name || "Sheltr ESP";
+    $("device-id").textContent = meta.id || "";
+    $("btn-logout").classList.toggle("hidden", !meta.authRequired);
+
+    const network = (state.system && state.system.network) || {};
+    const dot = $("net-dot");
+    let text = "offline";
+    let cls = "dot off";
+    if (network.ethernet && network.ethernet.connected) {
+      text = "ETH " + network.ethernet.ip;
+      cls = "dot on";
+    } else if (network.wifi && network.wifi.connected) {
+      text = "WIFI " + network.wifi.ip;
+      cls = "dot on";
+    } else if (network.accessPoint && network.accessPoint.active) {
+      text = "HOTSPOT " + network.accessPoint.ssid;
+      cls = "dot warn";
+    } else if (meta.apMode) {
+      text = "hotspot";
+      cls = "dot warn";
+    }
+    dot.className = cls;
+    $("net-text").textContent = text;
+  }
+
+  // ---------------------------------------------------------------- controllo
+
+  function busyKey(kind, id) { return kind + ":" + id; }
+
+  async function command(kind, id, path, body, label) {
+    const key = busyKey(kind, id);
+    if (state.busy.has(key)) return;
+    state.busy.add(key);
+    renderControl();
+    try {
+      await api(path, { method: "POST", body });
+      toast(label + " eseguito");
+      await loadStatus(false);
+    } catch (error) {
+      toast(label + ": " + error.message, true);
+    } finally {
+      state.busy.delete(key);
+      renderControl();
+    }
+  }
+
+  function tileHead(item, showRoom) {
+    const head = el("div", "tile-head");
+    const left = el("div");
+    left.style.minWidth = "0";
+    const title = el("div", "tile-title", item.name);
+    left.appendChild(title);
+    if (showRoom) left.appendChild(el("div", "tile-sub", item.room));
+    head.appendChild(left);
+
+    const actions = el("div", "tile-actions");
+    const profile = el("button", "ghost small", "◷");
+    profile.title = "Profilo orario";
+    if (item.profile && item.profile.enabled) profile.style.color = "var(--sky)";
+    profile.addEventListener("click", () => openProfile(item));
+    actions.appendChild(profile);
+    head.appendChild(actions);
+    return head;
+  }
+
+  function lightTile(item) {
+    const tile = el("div", "tile");
+    tile.appendChild(tileHead(item, state.room === null));
+    const row = el("div", "row2");
+    const disabled = state.busy.has(busyKey("light", item.id));
+    const on = el("button", "btn-on small" + (item.isOn === true ? " active" : ""), "ON");
+    const off = el("button", "btn-off small" + (item.isOn === false ? " active" : ""), "OFF");
+    on.disabled = disabled; off.disabled = disabled;
+    on.addEventListener("click", () => command("light", item.id, "/api/lights/command", { lightId: item.id, action: "on" }, "Comando luce"));
+    off.addEventListener("click", () => command("light", item.id, "/api/lights/command", { lightId: item.id, action: "off" }, "Comando luce"));
+    row.appendChild(on); row.appendChild(off);
+    tile.appendChild(row);
+    return tile;
+  }
+
+  function dimmerTile(item) {
+    const tile = el("div", "tile");
+    tile.appendChild(tileHead(item, state.room === null));
+    const disabled = state.busy.has(busyKey("dimmer", item.id));
+    const row = el("div", "row2");
+    const on = el("button", "btn-sel small" + (item.isOn === true ? " active" : ""), "ON");
+    const off = el("button", "btn-sel small" + (item.isOn === false ? " active" : ""), "OFF");
+    on.disabled = disabled; off.disabled = disabled;
+    on.addEventListener("click", () => command("dimmer", item.id, "/api/dimmers/command", { dimmerId: item.id, action: "on" }, "Comando dimmer"));
+    off.addEventListener("click", () => command("dimmer", item.id, "/api/dimmers/command", { dimmerId: item.id, action: "off" }, "Comando dimmer"));
+    row.appendChild(on); row.appendChild(off);
+    tile.appendChild(row);
+
+    const slider = el("div", "row");
+    const range = document.createElement("input");
+    range.type = "range"; range.min = "0"; range.max = "9"; range.step = "1";
+    range.value = String(item.level || 0);
+    range.disabled = disabled;
+    const level = el("span", "level", String(item.level || 0));
+    range.addEventListener("input", () => { level.textContent = range.value; });
+    range.addEventListener("change", () => command("dimmer", item.id, "/api/dimmers/command", { dimmerId: item.id, action: "set", level: Number(range.value) }, "Comando dimmer"));
+    slider.appendChild(range); slider.appendChild(level);
+    tile.appendChild(slider);
+    return tile;
+  }
+
+  function shutterTile(item) {
+    const tile = el("div", "tile");
+    tile.appendChild(tileHead(item, state.room === null));
+    const row = el("div", "row3");
+    const disabled = state.busy.has(busyKey("shutter", item.id));
+    const actions = [["SU", "up"], ["STOP", "stop"], ["GIU", "down"]];
+    for (const [label, action] of actions) {
+      const button = el("button", "btn-sel small" + (item.action === action ? " active" : ""), label);
+      button.disabled = disabled;
+      button.addEventListener("click", () => command("shutter", item.id, "/api/shutters/command", { shutterId: item.id, action }, "Comando tapparella"));
+      row.appendChild(button);
+    }
+    tile.appendChild(row);
+    return tile;
+  }
+
+  function thermostatTile(item) {
+    const tile = el("div", "tile");
+    const head = tileHead(item, state.room === null);
+    const dot = el("span", "dot" + (item.isActive ? " on pulse" : ""));
+    dot.title = item.isActive ? "Relè attivo" : "Relè non attivo";
+    dot.style.marginRight = "0.35rem";
+    head.firstChild.firstChild.prepend(dot);
+    tile.appendChild(head);
+
+    const temp = el("div", "temp");
+    const value = (item.temperature === null || item.temperature === undefined) ? "--.-" : Number(item.temperature).toFixed(1);
+    temp.textContent = value;
+    temp.appendChild(el("small", null, " °C"));
+    tile.appendChild(temp);
+
+    const disabled = state.busy.has(busyKey("thermostat", item.id));
+    const modes = el("div", "row2");
+    for (const [label, mode] of [["INVERNO", "winter"], ["ESTATE", "summer"]]) {
+      const button = el("button", "btn-sel small" + (item.mode === mode ? " active" : ""), label);
+      button.disabled = disabled;
+      button.addEventListener("click", () => command("thermostat", item.id, "/api/thermostats/command", { thermostatId: item.id, mode }, "Comando termostato"));
+      modes.appendChild(button);
+    }
+    tile.appendChild(modes);
+
+    const setpoint = Number(item.setpoint ?? 21);
+    const controls = el("div", "row");
+    controls.style.flexWrap = "nowrap";
+    const minus = el("button", "small", "−");
+    const plus = el("button", "small", "+");
+    minus.style.flex = "1"; plus.style.flex = "1";
+    minus.disabled = disabled; plus.disabled = disabled;
+    const box = el("div", "setpoint");
+    box.appendChild(el("span", null, "Setpoint"));
+    box.appendChild(el("span", null, setpoint.toFixed(1) + "°"));
+    const adjust = (delta) => {
+      const next = Math.min(30, Math.max(5, Math.round((setpoint + delta) * 2) / 2));
+      command("thermostat", item.id, "/api/thermostats/command", { thermostatId: item.id, setpoint: next }, "Setpoint termostato");
+    };
+    minus.addEventListener("click", () => adjust(-0.5));
+    plus.addEventListener("click", () => adjust(0.5));
+    controls.appendChild(minus); controls.appendChild(box); controls.appendChild(plus);
+    tile.appendChild(controls);
+    return tile;
+  }
+
+  function renderRoomsNav() {
+    const nav = $("rooms-nav");
+    nav.innerHTML = "";
+    const rooms = (state.status && state.status.rooms) || [];
+    const all = el("button", "small" + (state.room === null ? " primary" : ""), "Tutti");
+    all.addEventListener("click", () => { state.room = null; renderControl(); });
+    nav.appendChild(all);
+    for (const room of rooms) {
+      const count = room.lights.length + room.dimmers.length + room.shutters.length + room.thermostats.length;
+      if (!count) continue;
+      const button = el("button", "small" + (state.room === room.name ? " primary" : ""), room.name + " (" + count + ")");
+      if (state.room !== room.name) button.style.borderColor = room.color;
+      button.addEventListener("click", () => { state.room = room.name; renderControl(); });
+      nav.appendChild(button);
+    }
+  }
+
+  function renderSection(container, title, items, builder) {
+    if (!items.length) return;
+    container.appendChild(el("h2", "section-title", title));
+    const grid = el("div", "grid");
+    for (const item of items) grid.appendChild(builder(item));
+    container.appendChild(grid);
+  }
+
+  function renderControl() {
+    renderRoomsNav();
+    const body = $("control-body");
+    body.innerHTML = "";
+    const status = state.status;
+    if (!status) {
+      body.appendChild(el("p", "muted", "Caricamento stato…"));
+      return;
+    }
+
+    const banner = $("control-banner");
+    banner.innerHTML = "";
+    if (status.device && status.device.online === false) {
+      banner.appendChild(el("div", "banner", "Nessuna scheda risponde sul bus: controlla il cablaggio, gli indirizzi e il baudrate."));
+    }
+    if (Array.isArray(status.refreshErrors) && status.refreshErrors.length) {
+      const list = status.refreshErrors.map((item) => "indirizzo " + item.address + " (" + item.error + ")").join(", ");
+      banner.appendChild(el("div", "banner", "Polling non riuscito su: " + list));
+    }
+
+    const rooms = (status.rooms || []).filter((room) => state.room === null || room.name === state.room);
+    const lights = [], dimmers = [], shutters = [], thermostats = [];
+    for (const room of rooms) {
+      lights.push(...room.lights);
+      dimmers.push(...room.dimmers);
+      shutters.push(...room.shutters);
+      thermostats.push(...room.thermostats);
+    }
+
+    if (state.room === null && rooms.length > 1) {
+      const grid = el("div", "rooms");
+      for (const room of rooms) {
+        const count = room.lights.length + room.dimmers.length + room.shutters.length + room.thermostats.length;
+        if (!count) continue;
+        const card = el("button", "room-card");
+        card.style.background = room.color;
+        card.appendChild(el("strong", null, room.name));
+        const parts = [];
+        if (room.lights.length) parts.push(room.lights.length + " luci");
+        if (room.dimmers.length) parts.push(room.dimmers.length + " dimmer");
+        if (room.shutters.length) parts.push(room.shutters.length + " tapparelle");
+        if (room.thermostats.length) parts.push(room.thermostats.length + " termostati");
+        card.appendChild(el("small", null, parts.join(" · ")));
+        card.addEventListener("click", () => { state.room = room.name; renderControl(); });
+        grid.appendChild(card);
+      }
+      body.appendChild(el("h2", "section-title", "Stanze"));
+      body.appendChild(grid);
+    }
+
+    renderSection(body, "Luci", lights, lightTile);
+    renderSection(body, "Dimmer", dimmers, dimmerTile);
+    renderSection(body, "Tapparelle", shutters, shutterTile);
+    renderSection(body, "Termostati", thermostats, thermostatTile);
+
+    if (!lights.length && !dimmers.length && !shutters.length && !thermostats.length) {
+      body.appendChild(el("p", "muted", "Nessun dispositivo configurato: aggiungi le schede dalla configurazione."));
+    }
+  }
+
+  // -------------------------------------------------------- profili orari
+
+  function findConfigChannel(entityId) {
+    if (!state.config) return null;
+    for (const board of state.config.boards || []) {
+      for (const channel of board.channels || []) {
+        if (board.id + "-c" + channel.channel === entityId) return { board, channel };
+      }
+    }
+    return null;
+  }
+
+  async function openProfile(item) {
+    if (!state.config) await loadConfig();
+    const found = findConfigChannel(item.id);
+    if (!found) { toast("Canale non trovato in configurazione", true); return; }
+    state.profileTarget = found;
+    $("profile-title").textContent = "Profilo orario · " + found.channel.name;
+    $("profile-enabled").checked = Boolean(found.channel.profile && found.channel.profile.enabled);
+    renderProfileEntries();
+    $("profile-dialog").showModal();
+  }
+
+  function renderProfileEntries() {
+    const target = state.profileTarget;
+    const container = $("profile-entries");
+    container.innerHTML = "";
+    if (!target) return;
+    const kind = target.board.kind;
+    const profile = target.channel.profile || (target.channel.profile = { enabled: false, entries: [] });
+    profile.entries = profile.entries || [];
+
+    profile.entries.forEach((entry, index) => {
+      const box = el("div", "entry");
+      const fields = el("div", "fields");
+      if (kind === "thermostat") {
+        fields.appendChild(timeField("Dalle", entry.from || "00:00", (value) => { entry.from = value; }));
+        fields.appendChild(timeField("Alle", entry.to || "23:59", (value) => { entry.to = value; }));
+        const setpoint = el("div", "field");
+        setpoint.appendChild(el("label", null, "Setpoint °C"));
+        const input = document.createElement("input");
+        input.type = "number"; input.min = "5"; input.max = "30"; input.step = "0.5";
+        input.value = String(entry.setpoint ?? 21);
+        input.addEventListener("change", () => { entry.setpoint = Number(input.value); });
+        setpoint.appendChild(input);
+        fields.appendChild(setpoint);
+        const mode = el("div", "field");
+        mode.appendChild(el("label", null, "Stagione"));
+        const select = document.createElement("select");
+        for (const [label, value] of [["Inverno", "winter"], ["Estate", "summer"]]) {
+          const option = document.createElement("option");
+          option.value = value; option.textContent = label;
+          if ((entry.mode || "winter") === value) option.selected = true;
+          select.appendChild(option);
+        }
+        select.addEventListener("change", () => { entry.mode = select.value; });
+        mode.appendChild(select);
+        fields.appendChild(mode);
+      } else {
+        fields.appendChild(timeField("Orario", entry.time || "00:00", (value) => { entry.time = value; }));
+        const action = el("div", "field");
+        action.appendChild(el("label", null, "Azione"));
+        const select = document.createElement("select");
+        const options = kind === "shutter" ? [["Su", "up"], ["Giù", "down"]] : [["Accendi", "on"], ["Spegni", "off"]];
+        for (const [label, value] of options) {
+          const option = document.createElement("option");
+          option.value = value; option.textContent = label;
+          if (entry.action === value) option.selected = true;
+          select.appendChild(option);
+        }
+        select.addEventListener("change", () => { entry.action = select.value; });
+        action.appendChild(select);
+        fields.appendChild(action);
+      }
+      box.appendChild(fields);
+
+      const days = el("div", "days");
+      entry.days = Array.isArray(entry.days) && entry.days.length ? entry.days : [1, 2, 3, 4, 5, 6, 7];
+      for (const [label, day] of DAYS) {
+        const button = el("button", entry.days.includes(day) ? "active" : "", label);
+        button.addEventListener("click", () => {
+          entry.days = entry.days.includes(day) ? entry.days.filter((value) => value !== day) : entry.days.concat(day).sort();
+          if (!entry.days.length) entry.days = [1, 2, 3, 4, 5, 6, 7];
+          renderProfileEntries();
+        });
+        days.appendChild(button);
+      }
+      box.appendChild(days);
+
+      const remove = el("button", "small danger", "Rimuovi");
+      remove.style.marginTop = "0.5rem";
+      remove.addEventListener("click", () => { profile.entries.splice(index, 1); renderProfileEntries(); });
+      box.appendChild(remove);
+      container.appendChild(box);
+    });
+
+    if (!profile.entries.length) container.appendChild(el("p", "muted", "Nessuna fascia impostata."));
+  }
+
+  function timeField(label, value, onChange) {
+    const field = el("div", "field");
+    field.appendChild(el("label", null, label));
+    const input = document.createElement("input");
+    input.type = "time"; input.value = value;
+    input.addEventListener("change", () => onChange(input.value));
+    field.appendChild(input);
+    return field;
+  }
+
+  // ------------------------------------------------------------ configurazione
+
+  function renderBoards() {
+    const container = $("boards");
+    container.innerHTML = "";
+    const boards = (state.config && state.config.boards) || [];
+    boards.forEach((board, index) => {
+      const box = el("div", "board");
+      const head = el("div", "board-head");
+      head.appendChild(el("strong", null, board.name || board.id));
+      const remove = el("button", "small danger", "Elimina");
+      remove.addEventListener("click", () => {
+        if (boards.length <= 1) { toast("Serve almeno una scheda", true); return; }
+        boards.splice(index, 1);
+        renderBoards();
+      });
+      head.appendChild(remove);
+      box.appendChild(head);
+
+      const fields = el("div", "fields");
+      fields.appendChild(textField("Nome", board.name, (value) => { board.name = value; }));
+      fields.appendChild(textField("ID", board.id, (value) => { board.id = value; }));
+      const kind = el("div", "field");
+      kind.appendChild(el("label", null, "Tipo"));
+      const select = document.createElement("select");
+      for (const [label, value] of [["Luci", "light"], ["Tapparelle", "shutter"], ["Dimmer", "dimmer"], ["Termostato", "thermostat"]]) {
+        const option = document.createElement("option");
+        option.value = value; option.textContent = label;
+        if (board.kind === value) option.selected = true;
+        select.appendChild(option);
+      }
+      select.addEventListener("change", () => {
+        board.kind = select.value;
+        const max = board.kind === "light" ? 8 : board.kind === "shutter" ? 4 : 1;
+        board.channelStart = 1;
+        board.channelEnd = max;
+        board.channels = buildChannels(board);
+        renderBoards();
+      });
+      kind.appendChild(select);
+      fields.appendChild(kind);
+      fields.appendChild(numberField("Indirizzo", board.address, 0, 254, (value) => { board.address = value; }));
+      fields.appendChild(numberField("Canale iniziale", board.channelStart, 1, 8, (value) => {
+        board.channelStart = value; board.channels = buildChannels(board); renderBoards();
+      }));
+      fields.appendChild(numberField("Canale finale", board.channelEnd, 1, 8, (value) => {
+        board.channelEnd = value; board.channels = buildChannels(board); renderBoards();
+      }));
+      box.appendChild(fields);
+
+      const table = document.createElement("table");
+      const header = document.createElement("tr");
+      for (const label of ["CH", "Nome", "Stanza", "Profilo"]) header.appendChild(el("th", null, label));
+      table.appendChild(header);
+      for (const channel of board.channels || []) {
+        const row = document.createElement("tr");
+        row.appendChild(el("td", "mono", String(channel.channel)));
+        row.appendChild(inputCell(channel.name, (value) => { channel.name = value; }));
+        row.appendChild(inputCell(channel.room, (value) => { channel.room = value; }));
+        const profileCell = document.createElement("td");
+        const button = el("button", "small", (channel.profile && channel.profile.enabled) ? "Attivo" : "Imposta");
+        button.addEventListener("click", () => {
+          state.profileTarget = { board, channel };
+          $("profile-title").textContent = "Profilo orario · " + channel.name;
+          $("profile-enabled").checked = Boolean(channel.profile && channel.profile.enabled);
+          renderProfileEntries();
+          $("profile-dialog").showModal();
+        });
+        profileCell.appendChild(button);
+        row.appendChild(profileCell);
+        table.appendChild(row);
+      }
+      box.appendChild(table);
+      container.appendChild(box);
+    });
+  }
+
+  function buildChannels(board) {
+    const max = board.kind === "light" ? 8 : board.kind === "shutter" ? 4 : 1;
+    board.channelStart = Math.min(Math.max(1, board.channelStart || 1), max);
+    board.channelEnd = Math.min(Math.max(board.channelStart, board.channelEnd || max), max);
+    const existing = new Map((board.channels || []).map((channel) => [channel.channel, channel]));
+    const channels = [];
+    for (let number = board.channelStart; number <= board.channelEnd; number++) {
+      channels.push(existing.get(number) || {
+        channel: number,
+        name: defaultChannelName(board.kind, number),
+        room: "Senza stanza",
+        profile: { enabled: false, entries: [] },
+      });
+    }
+    return channels;
+  }
+
+  function defaultChannelName(kind, channel) {
+    if (kind === "shutter") return "Tapparella " + channel;
+    if (kind === "dimmer") return "Dimmer " + channel;
+    if (kind === "thermostat") return "Termostato " + channel;
+    return "Luce " + channel;
+  }
+
+  function textField(label, value, onChange) {
+    const field = el("div", "field");
+    field.appendChild(el("label", null, label));
+    const input = document.createElement("input");
+    input.type = "text"; input.value = value || "";
+    input.addEventListener("change", () => onChange(input.value));
+    field.appendChild(input);
+    return field;
+  }
+
+  function numberField(label, value, min, max, onChange) {
+    const field = el("div", "field");
+    field.appendChild(el("label", null, label));
+    const input = document.createElement("input");
+    input.type = "number"; input.min = String(min); input.max = String(max);
+    input.value = String(value ?? min);
+    input.addEventListener("change", () => onChange(Number(input.value)));
+    field.appendChild(input);
+    return field;
+  }
+
+  function inputCell(value, onChange) {
+    const cell = document.createElement("td");
+    const input = document.createElement("input");
+    input.type = "text"; input.value = value || "";
+    input.addEventListener("change", () => onChange(input.value));
+    cell.appendChild(input);
+    return cell;
+  }
+
+  function fillConfigForm() {
+    const config = state.config;
+    if (!config) return;
+    $("cfg-name").value = config.device.name || "";
+    $("cfg-id").value = config.device.id || "";
+    $("cfg-hostname").value = config.network.hostname || "";
+    $("cfg-mdns").textContent = "http://" + (config.network.hostname || "sheltr") + ".local";
+
+    $("cfg-bus-tx").value = config.bus.tx;
+    $("cfg-bus-rx").value = config.bus.rx;
+    $("cfg-bus-de").value = config.bus.de;
+    $("cfg-bus-baud").value = config.bus.baud;
+    $("cfg-bus-timeout").value = config.bus.timeoutMs;
+    $("cfg-bus-retries").value = config.bus.retries;
+    $("cfg-bus-poll").value = config.bus.pollIntervalSec;
+
+    $("cfg-mqtt-enabled").checked = config.mqtt.enabled;
+    $("cfg-mqtt-host").value = config.mqtt.host || "";
+    $("cfg-mqtt-port").value = config.mqtt.port;
+    $("cfg-mqtt-user").value = config.mqtt.username || "";
+    $("cfg-mqtt-pass").value = "";
+    $("cfg-mqtt-base").value = config.mqtt.baseTopic || "";
+    $("cfg-mqtt-prefix").value = config.mqtt.discoveryPrefix || "";
+    $("cfg-mqtt-interval").value = config.mqtt.stateIntervalSec;
+    $("cfg-mqtt-discovery").checked = config.mqtt.discovery;
+
+    $("cfg-cloud-enabled").checked = config.cloud.enabled;
+    $("cfg-cloud-host").value = config.cloud.host || "";
+    $("cfg-cloud-port").value = config.cloud.port;
+    $("cfg-cloud-user").value = config.cloud.username || "";
+    $("cfg-cloud-pass").value = "";
+    $("cfg-cloud-instance").value = config.cloud.instanceId || "";
+    $("cfg-cloud-instance-name").value = config.cloud.instanceName || "";
+    $("cfg-cloud-format").value = config.cloud.payloadFormat || "frame_hex_space_crlf";
+    updateCloudTopics();
+
+    $("cfg-eth-enabled").checked = config.network.ethEnabled;
+    $("cfg-dhcp").checked = config.network.dhcp;
+    $("cfg-ip").value = config.network.ip || "";
+    $("cfg-gateway").value = config.network.gateway || "";
+    $("cfg-subnet").value = config.network.subnet || "";
+    $("cfg-dns1").value = config.network.dns1 || "";
+    $("cfg-wifi-ssid").value = config.network.wifiSsid || "";
+    $("cfg-wifi-pass").value = "";
+    $("cfg-ap-ssid").value = config.network.apSsid || "";
+    $("cfg-ap-pass").value = "";
+    $("cfg-ap-fallback").checked = config.network.apFallback;
+
+    $("cfg-ntp-enabled").checked = config.ntp.enabled;
+    $("cfg-ntp-server").value = config.ntp.server || "";
+    $("cfg-ntp-tz").value = config.ntp.tz || "";
+
+    $("cfg-auth-enabled").checked = config.auth.enabled;
+    $("cfg-auth-user").value = config.auth.username || "";
+    $("cfg-auth-pass").value = "";
+
+    renderBoards();
+  }
+
+  function updateCloudTopics() {
+    const instance = $("cfg-cloud-instance").value || "sheltr-esp";
+    $("cfg-cloud-topics").textContent = instance + "/config · " + instance + "/cmd · " + instance + "/pub";
+  }
+
+  function collectConfig() {
+    const config = state.config;
+    config.device.name = $("cfg-name").value;
+    config.device.id = $("cfg-id").value;
+    config.network.hostname = $("cfg-hostname").value;
+
+    config.bus.tx = Number($("cfg-bus-tx").value);
+    config.bus.rx = Number($("cfg-bus-rx").value);
+    config.bus.de = Number($("cfg-bus-de").value);
+    config.bus.baud = Number($("cfg-bus-baud").value);
+    config.bus.timeoutMs = Number($("cfg-bus-timeout").value);
+    config.bus.retries = Number($("cfg-bus-retries").value);
+    config.bus.pollIntervalSec = Number($("cfg-bus-poll").value);
+
+    config.mqtt.enabled = $("cfg-mqtt-enabled").checked;
+    config.mqtt.host = $("cfg-mqtt-host").value;
+    config.mqtt.port = Number($("cfg-mqtt-port").value);
+    config.mqtt.username = $("cfg-mqtt-user").value;
+    config.mqtt.baseTopic = $("cfg-mqtt-base").value;
+    config.mqtt.discoveryPrefix = $("cfg-mqtt-prefix").value;
+    config.mqtt.stateIntervalSec = Number($("cfg-mqtt-interval").value);
+    config.mqtt.discovery = $("cfg-mqtt-discovery").checked;
+    if ($("cfg-mqtt-pass").value) config.mqtt.password = $("cfg-mqtt-pass").value;
+    else delete config.mqtt.password;
+
+    config.cloud.enabled = $("cfg-cloud-enabled").checked;
+    config.cloud.host = $("cfg-cloud-host").value;
+    config.cloud.port = Number($("cfg-cloud-port").value);
+    config.cloud.username = $("cfg-cloud-user").value;
+    config.cloud.instanceId = $("cfg-cloud-instance").value;
+    config.cloud.instanceName = $("cfg-cloud-instance-name").value;
+    config.cloud.payloadFormat = $("cfg-cloud-format").value;
+    if ($("cfg-cloud-pass").value) config.cloud.password = $("cfg-cloud-pass").value;
+    else delete config.cloud.password;
+
+    config.network.ethEnabled = $("cfg-eth-enabled").checked;
+    config.network.dhcp = $("cfg-dhcp").checked;
+    config.network.ip = $("cfg-ip").value;
+    config.network.gateway = $("cfg-gateway").value;
+    config.network.subnet = $("cfg-subnet").value;
+    config.network.dns1 = $("cfg-dns1").value;
+    config.network.wifiSsid = $("cfg-wifi-ssid").value;
+    if ($("cfg-wifi-pass").value) config.network.wifiPassword = $("cfg-wifi-pass").value;
+    else delete config.network.wifiPassword;
+    config.network.apSsid = $("cfg-ap-ssid").value;
+    if ($("cfg-ap-pass").value) config.network.apPassword = $("cfg-ap-pass").value;
+    else delete config.network.apPassword;
+    config.network.apFallback = $("cfg-ap-fallback").checked;
+
+    config.ntp.enabled = $("cfg-ntp-enabled").checked;
+    config.ntp.server = $("cfg-ntp-server").value;
+    config.ntp.tz = $("cfg-ntp-tz").value;
+
+    config.auth.enabled = $("cfg-auth-enabled").checked;
+    config.auth.username = $("cfg-auth-user").value;
+    if ($("cfg-auth-pass").value) config.auth.password = $("cfg-auth-pass").value;
+    else delete config.auth.password;
+
+    return config;
+  }
+
+  // ------------------------------------------------------------------ sistema
+
+  function renderSystem() {
+    const system = state.system;
+    const kv = $("system-kv");
+    kv.innerHTML = "";
+    if (!system) return;
+    const rows = [
+      ["Firmware", system.firmware],
+      ["Scheda", system.board],
+      ["Protocollo", system.protocolVersion],
+      ["Uptime", formatUptime(system.uptimeSec)],
+      ["Heap libero", formatBytes(system.freeHeap)],
+      ["PSRAM libera", formatBytes(system.freePsram)],
+      ["Spazio OTA", formatBytes(system.freeSketchSpace)],
+      ["Orologio", system.timeSynced ? system.time : "non sincronizzato"],
+      ["Dominio locale", system.network.mdns],
+      ["Ethernet", system.network.ethernet.connected ? system.network.ethernet.ip + " (" + system.network.ethernet.linkSpeed + " Mbps)" : "non connessa"],
+      ["WiFi", system.network.wifi.connected ? system.network.wifi.ssid + " · " + system.network.wifi.ip + " (" + system.network.wifi.rssi + " dBm)" : "non connesso"],
+      ["Hotspot", system.network.accessPoint.active ? system.network.accessPoint.ssid + " · " + system.network.accessPoint.ip : "spento"],
+      ["MQTT locale", system.mqtt.local.enabled ? (system.mqtt.local.connected ? "connesso a " + system.mqtt.local.host : "disconnesso · " + (system.mqtt.local.lastError || "")) : "disabilitato"],
+      ["Sheltr Cloud", system.mqtt.cloud.enabled ? (system.mqtt.cloud.connected ? "connesso a " + system.mqtt.cloud.host : "disconnesso · " + (system.mqtt.cloud.lastError || "")) : "disabilitato"],
+      ["Profili orari", system.schedules.appliedCount + " applicazioni"],
+    ];
+    for (const [key, value] of rows) {
+      kv.appendChild(el("dt", null, key));
+      kv.appendChild(el("dd", null, String(value ?? "")));
+    }
+
+    const busKv = $("bus-kv");
+    busKv.innerHTML = "";
+    const busRows = [
+      ["Pin", "TX " + system.bus.tx + " · RX " + system.bus.rx + " · DE " + system.bus.de],
+      ["Baudrate", system.bus.baud + " 8N1"],
+      ["Timeout", system.bus.timeoutMs + " ms"],
+      ["Frame inviati", system.bus.framesSent],
+      ["Risposte valide", system.bus.framesOk],
+      ["Errori", system.bus.framesError],
+      ["Ultimo errore", system.bus.lastError || "—"],
+    ];
+    for (const [key, value] of busRows) {
+      busKv.appendChild(el("dt", null, key));
+      busKv.appendChild(el("dd", null, String(value)));
+    }
+
+    const table = $("boards-status");
+    table.innerHTML = "";
+    const header = document.createElement("tr");
+    for (const label of ["Scheda", "Indirizzo", "Tipo", "Stato", "Uscite", "Temp."]) header.appendChild(el("th", null, label));
+    table.appendChild(header);
+    for (const board of (state.status && state.status.boards) || []) {
+      const row = document.createElement("tr");
+      row.appendChild(el("td", null, board.name));
+      row.appendChild(el("td", "mono", String(board.address)));
+      row.appendChild(el("td", null, board.kind));
+      row.appendChild(el("td", null, board.online ? "online" : "offline"));
+      row.appendChild(el("td", "mono", board.poll ? "0b" + Number(board.poll.outputMask).toString(2).padStart(8, "0") : "—"));
+      row.appendChild(el("td", "mono", board.poll ? Number(board.poll.temperature).toFixed(1) + " °C" : "—"));
+      table.appendChild(row);
+    }
+  }
+
+  function formatUptime(seconds) {
+    const value = Number(seconds || 0);
+    const days = Math.floor(value / 86400);
+    const hours = Math.floor((value % 86400) / 3600);
+    const minutes = Math.floor((value % 3600) / 60);
+    return (days ? days + "g " : "") + hours + "h " + minutes + "m";
+  }
+
+  function formatBytes(value) {
+    const bytes = Number(value || 0);
+    if (bytes > 1048576) return (bytes / 1048576).toFixed(1) + " MB";
+    if (bytes > 1024) return (bytes / 1024).toFixed(0) + " kB";
+    return bytes + " B";
+  }
+
+  // --------------------------------------------------------------- caricamenti
+
+  async function loadMeta() {
+    state.meta = await api("/api/meta");
+    renderHeader();
+    if (state.meta.authRequired && !state.meta.authenticated) {
+      showLogin();
+      return false;
+    }
+    return true;
+  }
+
+  async function loadStatus(refresh) {
+    state.status = await api("/api/status" + (refresh ? "?refresh=1" : ""));
+    renderControl();
+    if (state.view === "system") renderSystem();
+  }
+
+  async function loadConfig() {
+    state.config = await api("/api/config");
+    fillConfigForm();
+  }
+
+  async function loadSystem() {
+    state.system = await api("/api/system");
+    renderHeader();
+    renderSystem();
+  }
+
+  // ------------------------------------------------------------------- eventi
+
+  function bindEvents() {
+    for (const button of $("tabs").querySelectorAll("button")) {
+      button.addEventListener("click", () => setView(button.dataset.view));
+    }
+
+    $("btn-refresh").addEventListener("click", async () => {
+      $("btn-refresh").disabled = true;
+      try {
+        await loadStatus(true);
+        toast("Stato aggiornato dal bus");
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        $("btn-refresh").disabled = false;
+      }
+    });
+
+    $("btn-login").addEventListener("click", async () => {
+      try {
+        const data = await api("/api/auth/login", {
+          method: "POST",
+          body: { username: $("login-user").value, password: $("login-pass").value },
+        });
+        state.token = data.token || "";
+        localStorage.setItem("sheltr_token", state.token);
+        await boot();
+      } catch (error) {
+        toast(error.message, true);
+      }
+    });
+
+    $("btn-logout").addEventListener("click", async () => {
+      try { await api("/api/auth/logout", { method: "POST" }); } catch (error) { /* ignora */ }
+      state.token = "";
+      localStorage.removeItem("sheltr_token");
+      showLogin();
+    });
+
+    $("btn-add-board").addEventListener("click", () => {
+      if (!state.config) return;
+      const index = (state.config.boards || []).length + 1;
+      const board = {
+        id: "board-" + index,
+        name: "Scheda " + index,
+        kind: "light",
+        address: index,
+        channelStart: 1,
+        channelEnd: 8,
+        channels: [],
+      };
+      board.channels = buildChannels(board);
+      state.config.boards.push(board);
+      renderBoards();
+    });
+
+    $("btn-save").addEventListener("click", async () => {
+      $("btn-save").disabled = true;
+      try {
+        const payload = collectConfig();
+        const data = await api("/api/config", { method: "PUT", body: payload });
+        $("save-hint").textContent = "Salvata (revisione " + data.revision + ")";
+        toast(data.restartRequired
+          ? "Configurazione salvata: riavvia il dispositivo per applicare le impostazioni di rete"
+          : "Configurazione salvata");
+        await loadConfig();
+        await loadStatus(false);
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        $("btn-save").disabled = false;
+      }
+    });
+
+    $("btn-reload-config").addEventListener("click", () => loadConfig().catch((error) => toast(error.message, true)));
+    $("cfg-cloud-instance").addEventListener("input", updateCloudTopics);
+
+    $("btn-scan").addEventListener("click", async () => {
+      $("btn-scan").disabled = true;
+      try {
+        const data = await api("/api/wifi/scan");
+        const list = $("wifi-list");
+        list.innerHTML = "";
+        for (const network of data.networks || []) {
+          const option = document.createElement("option");
+          option.value = network.ssid;
+          option.label = network.ssid + " (" + network.rssi + " dBm)";
+          list.appendChild(option);
+        }
+        toast((data.networks || []).length + " reti trovate");
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        $("btn-scan").disabled = false;
+      }
+    });
+
+    $("btn-wifi-connect").addEventListener("click", async () => {
+      $("btn-wifi-connect").disabled = true;
+      try {
+        const data = await api("/api/wifi/connect", {
+          method: "POST",
+          body: { ssid: $("cfg-wifi-ssid").value, password: $("cfg-wifi-pass").value },
+        });
+        toast("Connesso: " + data.ip + " · " + data.hostname);
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        $("btn-wifi-connect").disabled = false;
+      }
+    });
+
+    $("btn-frame").addEventListener("click", async () => {
+      try {
+        const data = await api("/api/frame", { method: "POST", body: { hex: $("frame-hex").value } });
+        $("frame-out").textContent = "TX: " + data.frame + "\nRX: " + (data.responseHex || "(nessuna risposta)");
+      } catch (error) {
+        $("frame-out").textContent = "Errore: " + error.message;
+      }
+    });
+
+    $("btn-ota").addEventListener("click", async () => {
+      const input = $("ota-file");
+      if (!input.files || !input.files[0]) { toast("Seleziona un file .bin", true); return; }
+      const form = new FormData();
+      form.append("firmware", input.files[0]);
+      $("ota-status").textContent = "Caricamento…";
+      try {
+        const headers = state.token ? { Authorization: "Bearer " + state.token } : {};
+        const response = await fetch("/api/system/ota", { method: "POST", body: form, headers });
+        const data = await response.json();
+        if (!response.ok || !data.ok) throw new Error(data.error || "Aggiornamento fallito");
+        $("ota-status").textContent = "Completato, riavvio in corso…";
+        toast("Firmware aggiornato");
+      } catch (error) {
+        $("ota-status").textContent = "";
+        toast(error.message, true);
+      }
+    });
+
+    $("btn-restart").addEventListener("click", async () => {
+      if (!confirm("Riavviare il dispositivo?")) return;
+      try { await api("/api/system/restart", { method: "POST" }); toast("Riavvio in corso…"); } catch (error) { toast(error.message, true); }
+    });
+
+    $("btn-factory").addEventListener("click", async () => {
+      if (!confirm("Ripristinare la configurazione di fabbrica? Le schede configurate verranno perse.")) return;
+      try {
+        await api("/api/system/factory-reset", { method: "POST", body: { keepNetwork: true } });
+        toast("Configurazione ripristinata, riavvio…");
+      } catch (error) {
+        toast(error.message, true);
+      }
+    });
+
+    $("profile-close").addEventListener("click", () => $("profile-dialog").close());
+    $("profile-add").addEventListener("click", () => {
+      const target = state.profileTarget;
+      if (!target) return;
+      const profile = target.channel.profile || (target.channel.profile = { enabled: false, entries: [] });
+      profile.entries = profile.entries || [];
+      profile.entries.push(target.board.kind === "thermostat"
+        ? { from: "07:00", to: "22:00", setpoint: 21, mode: "winter", days: [1, 2, 3, 4, 5, 6, 7] }
+        : { time: "08:00", action: target.board.kind === "shutter" ? "up" : "on", days: [1, 2, 3, 4, 5, 6, 7] });
+      renderProfileEntries();
+    });
+    $("profile-save").addEventListener("click", () => {
+      const target = state.profileTarget;
+      if (target) {
+        target.channel.profile = target.channel.profile || { enabled: false, entries: [] };
+        target.channel.profile.enabled = $("profile-enabled").checked;
+      }
+      $("profile-dialog").close();
+      renderBoards();
+      toast("Profilo aggiornato: ricordati di salvare");
+    });
+  }
+
+  // --------------------------------------------------------------------- boot
+
+  async function boot() {
+    try {
+      const ready = await loadMeta();
+      if (!ready) return;
+      setView(state.view);
+      await Promise.all([loadStatus(false), loadSystem()]);
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
+  bindEvents();
+  boot();
+  setInterval(() => {
+    if (state.view === "control" && !state.busy.size) loadStatus(false).catch(() => {});
+    if (state.view === "system") loadSystem().catch(() => {});
+  }, 15000);
+})();
+</script>
+</body>
+</html>

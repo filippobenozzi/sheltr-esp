@@ -1,0 +1,603 @@
+#include "mqtt_bridge.h"
+
+#include <PubSubClient.h>
+#include <WiFi.h>
+
+#include "devices.h"
+#include "json_utils.h"
+#include "net_manager.h"
+#include "protocol.h"
+#include "settings.h"
+
+namespace mqtt {
+
+namespace {
+
+WiFiClient g_localSocket;
+WiFiClient g_cloudSocket;
+PubSubClient g_local(g_localSocket);
+PubSubClient g_cloud(g_cloudSocket);
+
+uint32_t g_nextLocalAttempt = 0;
+uint32_t g_nextCloudAttempt = 0;
+uint32_t g_nextStatePublish = 0;
+uint32_t g_publishedRevision = 0;
+bool g_discoveryPublished = false;
+bool g_cloudConfigPublished = false;
+uint32_t g_localFailures = 0;
+uint32_t g_cloudFailures = 0;
+String g_localError;
+String g_cloudError;
+
+String boardSlug(const cfg::Board &board) { return cfg::slugify(board.id, "board"); }
+
+String topicPrefix(const cfg::Board &board) {
+  return cfg::config().mqtt.baseTopic + "/" + boardSlug(board);
+}
+
+String availabilityTopic(const cfg::Board &board) { return topicPrefix(board) + "/availability"; }
+
+String bridgeStatusTopic() { return cfg::config().mqtt.baseTopic + "/bridge/status"; }
+
+String cloudStatusTopic() { return cfg::config().cloud.instanceId + "/bridge/status"; }
+
+void publishLocal(const String &topic, const String &payload, bool retain) {
+  if (!g_local.connected()) return;
+  if (!g_local.publish(topic.c_str(), reinterpret_cast<const uint8_t *>(payload.c_str()),
+                       payload.length(), retain)) {
+    log_w("Publish MQTT fallita: %s (%u byte)", topic.c_str(),
+          static_cast<unsigned>(payload.length()));
+  }
+}
+
+void deviceJson(const cfg::Board &board, JsonObject device) {
+  JsonArray identifiers = device["identifiers"].to<JsonArray>();
+  identifiers.add(String("sheltr_") + boardSlug(board));
+  device["name"] = board.name;
+  device["manufacturer"] = "Sheltr";
+  device["model"] = String("board-") + board.kind;
+  device["sw_version"] = SHELTR_FW_VERSION;
+  // Il gateway è il dispositivo padre logico di tutte le schede.
+  device["via_device"] = String("sheltr_") + cfg::slugify(cfg::config().device.id, "sheltr-esp");
+}
+
+void bridgeDeviceJson(JsonObject device) {
+  JsonArray identifiers = device["identifiers"].to<JsonArray>();
+  identifiers.add(String("sheltr_") + cfg::slugify(cfg::config().device.id, "sheltr-esp"));
+  device["name"] = cfg::config().device.name;
+  device["manufacturer"] = "Sheltr";
+  device["model"] = SHELTR_BOARD_NAME;
+  device["sw_version"] = SHELTR_FW_VERSION;
+  device["configuration_url"] = String("http://") + cfg::config().network.hostname + ".local";
+}
+
+void publishDiscoveryPayload(const String &topic, JsonDocument &doc) {
+  String payload;
+  serializeJson(doc, payload);
+  publishLocal(topic, payload, true);
+}
+
+void publishDiscovery() {
+  const cfg::Config &current = cfg::config();
+  if (!current.mqtt.discovery) return;
+  const String prefix = current.mqtt.discoveryPrefix;
+  uint16_t count = 0;
+
+  for (const cfg::Board &board : current.boards) {
+    const String slug = boardSlug(board);
+    const String base = topicPrefix(board);
+    const String availability = availabilityTopic(board);
+
+    {
+      JsonDocument doc(&SpiRamAllocator::instance());
+      const String uniqueId = String("sheltr_") + slug + "_poll";
+      doc["name"] = board.name + " Polling";
+      doc["unique_id"] = uniqueId;
+      doc["command_topic"] = base + "/poll/set";
+      doc["payload_press"] = "POLL";
+      doc["availability_topic"] = availability;
+      deviceJson(board, doc["device"].to<JsonObject>());
+      publishDiscoveryPayload(prefix + "/button/" + uniqueId + "/config", doc);
+      count++;
+    }
+
+    for (const cfg::Channel &channel : board.channels) {
+      const String uniqueId = String("sheltr_") + slug + "_ch" + channel.channel;
+      const String channelBase = base + "/ch" + channel.channel;
+      JsonDocument doc(&SpiRamAllocator::instance());
+      doc["name"] = channel.name;
+      doc["unique_id"] = uniqueId;
+      doc["availability_topic"] = availability;
+      String component;
+
+      if (board.kind == "light") {
+        component = "light";
+        doc["command_topic"] = channelBase + "/set";
+        doc["state_topic"] = channelBase + "/state";
+        doc["payload_on"] = "ON";
+        doc["payload_off"] = "OFF";
+      } else if (board.kind == "dimmer") {
+        component = "light";
+        doc["command_topic"] = channelBase + "/set";
+        doc["state_topic"] = channelBase + "/state";
+        doc["brightness_command_topic"] = channelBase + "/brightness/set";
+        doc["brightness_state_topic"] = channelBase + "/brightness/state";
+        doc["brightness_scale"] = 255;
+        doc["payload_on"] = "ON";
+        doc["payload_off"] = "OFF";
+      } else if (board.kind == "shutter") {
+        component = "cover";
+        doc["command_topic"] = channelBase + "/set";
+        doc["state_topic"] = channelBase + "/state";
+        doc["payload_open"] = "OPEN";
+        doc["payload_close"] = "CLOSE";
+        doc["payload_stop"] = "STOP";
+        doc["state_open"] = "OPEN";
+        doc["state_opening"] = "OPENING";
+        doc["state_closed"] = "CLOSED";
+        doc["state_closing"] = "CLOSING";
+        doc["assumed_state"] = true;
+        doc["optimistic"] = true;
+      } else {
+        component = "climate";
+        doc["mode_command_topic"] = channelBase + "/mode/set";
+        doc["mode_state_topic"] = channelBase + "/mode/state";
+        doc["temperature_command_topic"] = channelBase + "/temperature/set";
+        doc["temperature_state_topic"] = channelBase + "/setpoint/state";
+        doc["current_temperature_topic"] = channelBase + "/temperature/state";
+        doc["action_topic"] = channelBase + "/action/state";
+        JsonArray modes = doc["modes"].to<JsonArray>();
+        modes.add("off");
+        modes.add("heat");
+        modes.add("cool");
+        doc["min_temp"] = 5;
+        doc["max_temp"] = 30;
+        doc["temp_step"] = 0.5;
+        doc["temperature_unit"] = "C";
+        doc["precision"] = 0.5;
+      }
+
+      JsonObject device = doc["device"].to<JsonObject>();
+      deviceJson(board, device);
+      doc["json_attributes_topic"] = channelBase + "/attributes";
+      publishDiscoveryPayload(prefix + "/" + component + "/" + uniqueId + "/config", doc);
+
+      JsonDocument attributes(&SpiRamAllocator::instance());
+      attributes["board_id"] = board.id;
+      attributes["address"] = board.address;
+      attributes["channel"] = channel.channel;
+      attributes["room"] = channel.room;
+      attributes["kind"] = board.kind;
+      String attributesPayload;
+      serializeJson(attributes, attributesPayload);
+      publishLocal(channelBase + "/attributes", attributesPayload, true);
+      count++;
+    }
+  }
+
+  // Pulsanti di servizio del gateway
+  struct BridgeButton {
+    const char *suffix;
+    const char *name;
+    const char *topic;
+    const char *payload;
+  };
+  const BridgeButton buttons[] = {
+      {"poll_all", "Polling tutte le schede", "/poll_all/set", "POLL"},
+      {"restart", "Riavvia gateway", "/service/restart/set", "RESTART"},
+  };
+  for (const BridgeButton &button : buttons) {
+    JsonDocument doc(&SpiRamAllocator::instance());
+    const String uniqueId = String("sheltr_") + cfg::slugify(current.device.id, "gateway") + "_" +
+                            button.suffix;
+    doc["name"] = button.name;
+    doc["unique_id"] = uniqueId;
+    doc["command_topic"] = current.mqtt.baseTopic + button.topic;
+    doc["payload_press"] = button.payload;
+    doc["availability_topic"] = bridgeStatusTopic();
+    bridgeDeviceJson(doc["device"].to<JsonObject>());
+    publishDiscoveryPayload(prefix + "/button/" + uniqueId + "/config", doc);
+    count++;
+  }
+
+  log_i("Discovery Home Assistant pubblicata: %u entità", count);
+  g_discoveryPublished = true;
+}
+
+void publishBoardStates() {
+  const cfg::Config &current = cfg::config();
+  for (const cfg::Board &board : current.boards) {
+    const String base = topicPrefix(board);
+    publishLocal(availabilityTopic(board), devices::boardOnline(board.address) ? "online" : "offline",
+                 true);
+    for (const cfg::Channel &channel : board.channels) {
+      const String id = cfg::entityId(board.id, channel.channel);
+      const String channelBase = base + "/ch" + channel.channel;
+      if (board.kind == "light") {
+        const devices::LightState *state = devices::lightState(id);
+        if (state == nullptr || state->isOn < 0) continue;
+        publishLocal(channelBase + "/state", state->isOn == 1 ? "ON" : "OFF", true);
+      } else if (board.kind == "dimmer") {
+        const devices::DimmerState *state = devices::dimmerState(id);
+        if (state == nullptr) continue;
+        const int brightness = constrain((state->level * 255) / 9, 0, 255);
+        publishLocal(channelBase + "/state", state->level > 0 ? "ON" : "OFF", true);
+        publishLocal(channelBase + "/brightness/state", String(brightness), true);
+      } else if (board.kind == "shutter") {
+        const devices::ShutterState *state = devices::shutterState(id);
+        if (state == nullptr) continue;
+        String value = "STOP";
+        if (state->action == "up") value = "OPENING";
+        if (state->action == "down") value = "CLOSING";
+        publishLocal(channelBase + "/state", value, true);
+      } else {
+        const devices::ThermostatState *state = devices::thermostatState(id);
+        if (state == nullptr) continue;
+        const bool isOn = state->isOn != 0;
+        const bool summer = state->mode == "summer";
+        String hvacMode = "off";
+        String hvacAction = "off";
+        if (isOn) {
+          hvacMode = summer ? "cool" : "heat";
+          hvacAction = state->isActive == 1 ? (summer ? "cooling" : "heating") : "idle";
+        }
+        if (state->hasTemperature) {
+          publishLocal(channelBase + "/temperature/state",
+                       String(roundf(state->temperature * 10.0f) / 10.0f, 1), true);
+        }
+        publishLocal(channelBase + "/setpoint/state", String(state->setpoint, 1), true);
+        publishLocal(channelBase + "/mode/state", hvacMode, true);
+        publishLocal(channelBase + "/action/state", hvacAction, true);
+        publishLocal(channelBase + "/power/state", isOn ? "ON" : "OFF", true);
+      }
+    }
+  }
+}
+
+void handleLocalCommand(const String &topic, const String &payload) {
+  const cfg::Config &current = cfg::config();
+  const String base = current.mqtt.baseTopic + "/";
+  if (!topic.startsWith(base)) return;
+  const String tail = topic.substring(base.length());
+  String value = payload;
+  value.trim();
+  String upper = value;
+  upper.toUpperCase();
+
+  if (tail == "poll_all/set") {
+    devices::pollAll();
+    publishBoardStates();
+    return;
+  }
+  if (tail == "service/restart/set") {
+    log_w("Riavvio richiesto da MQTT");
+    delay(200);
+    ESP.restart();
+    return;
+  }
+
+  const int firstSlash = tail.indexOf('/');
+  if (firstSlash <= 0) return;
+  const String slug = tail.substring(0, firstSlash);
+  String rest = tail.substring(firstSlash + 1);
+
+  cfg::Board *board = nullptr;
+  for (cfg::Board &item : cfg::config().boards) {
+    if (boardSlug(item) == slug) board = &item;
+  }
+  if (board == nullptr) return;
+
+  if (rest == "poll/set") {
+    String error;
+    devices::pollAddress(board->address, error);
+    publishBoardStates();
+    return;
+  }
+
+  if (!rest.startsWith("ch")) return;
+  const int slash = rest.indexOf('/');
+  if (slash < 0) return;
+  const uint8_t channel = rest.substring(2, slash).toInt();
+  const String action = rest.substring(slash + 1);
+  const String id = cfg::entityId(board->id, channel);
+
+  if (board->kind == "light" && action == "set") {
+    devices::commandLight(id, upper == "TOGGLE" ? "toggle" : (upper == "ON" ? "on" : "off"));
+  } else if (board->kind == "shutter" && action == "set") {
+    String command = "stop";
+    if (upper == "OPEN" || upper == "UP") command = "up";
+    if (upper == "CLOSE" || upper == "DOWN") command = "down";
+    devices::commandShutter(id, command);
+  } else if (board->kind == "dimmer") {
+    if (action == "brightness/set") {
+      const int raw = value.toInt();
+      int level = raw;
+      if (raw > 9 && raw <= 100) level = static_cast<int>(roundf(raw * 9.0f / 100.0f));
+      if (raw > 100) level = static_cast<int>(roundf(raw * 9.0f / 255.0f));
+      devices::commandDimmer(id, "set", constrain(level, 0, 9));
+    } else if (action == "set") {
+      if (upper == "ON" || upper == "OFF" || upper == "TOGGLE") {
+        String command = upper;
+        command.toLowerCase();
+        devices::commandDimmer(id, command, -1);
+      } else {
+        devices::commandDimmer(id, "set", constrain(value.toInt(), 0, 9));
+      }
+    }
+  } else if (board->kind == "thermostat") {
+    if (action == "temperature/set" || action == "setpoint/set") {
+      devices::commandThermostat(id, true, value.toFloat(), "", -1);
+    } else if (action == "mode/set") {
+      if (upper == "OFF") {
+        devices::commandThermostat(id, false, 0, "", 0);
+      } else {
+        devices::commandThermostat(id, false, 0, upper == "COOL" ? "summer" : "winter", 1);
+      }
+    } else if (action == "power/set") {
+      devices::commandThermostat(id, false, 0, "", upper == "ON" ? 1 : 0);
+    }
+  }
+
+  publishBoardStates();
+}
+
+void cloudInstanceJson(JsonObject out) {
+  const cfg::Config &current = cfg::config();
+  out["id"] = current.cloud.instanceId;
+  out["name"] = current.cloud.instanceName;
+  out["deviceType"] = "sheltr_mini";
+  JsonObject device = out["device"].to<JsonObject>();
+  device["type"] = "sheltr_esp";
+  device["board"] = SHELTR_BOARD_NAME;
+  device["firmware"] = SHELTR_FW_VERSION;
+  out["protocolVersion"] = "1.6";
+
+  JsonArray boards = out["boards"].to<JsonArray>();
+  JsonArray deviceList = out["devices"].to<JsonArray>();
+  for (const cfg::Board &board : current.boards) {
+    JsonObject item = boards.add<JsonObject>();
+    item["id"] = board.id;
+    item["name"] = board.name;
+    item["address"] = board.address;
+    item["kind"] = board.kind;
+    item["channelStart"] = board.channelStart;
+    item["channelEnd"] = board.channelEnd;
+    JsonArray channels = item["channels"].to<JsonArray>();
+    for (const cfg::Channel &channel : board.channels) {
+      JsonObject entry = channels.add<JsonObject>();
+      entry["channel"] = channel.channel;
+      entry["name"] = channel.name;
+      entry["room"] = channel.room;
+
+      JsonObject deviceEntry = deviceList.add<JsonObject>();
+      deviceEntry["id"] = cfg::entityId(board.id, channel.channel);
+      deviceEntry["kind"] = board.kind;
+      deviceEntry["boardId"] = board.id;
+      deviceEntry["boardName"] = board.name;
+      deviceEntry["address"] = board.address;
+      deviceEntry["channel"] = channel.channel;
+      deviceEntry["name"] = channel.name;
+      deviceEntry["room"] = channel.room;
+    }
+  }
+
+  JsonObject mqttInfo = out["mqtt"].to<JsonObject>();
+  mqttInfo["baseTopic"] = current.cloud.instanceId;
+  mqttInfo["configTopic"] = current.cloud.instanceId + "/config";
+  mqttInfo["lightCommandTopic"] = current.cloud.instanceId + "/cmd";
+  mqttInfo["lightResponseTopic"] = current.cloud.instanceId + "/pub";
+  mqttInfo["lightPayloadFormat"] = current.cloud.payloadFormat;
+  out["updatedAt"] = devices::isoTimestamp();
+}
+
+void publishCloudConfig() {
+  if (!g_cloud.connected()) return;
+  JsonDocument doc(&SpiRamAllocator::instance());
+  JsonObject root = doc.to<JsonObject>();
+  cloudInstanceJson(root);
+  const size_t length = measureJson(doc);
+  const String topic = cfg::config().cloud.instanceId + "/config";
+  if (!g_cloud.beginPublish(topic.c_str(), length, true)) {
+    log_w("Publish configurazione cloud fallita");
+    return;
+  }
+  serializeJson(doc, g_cloud);
+  g_cloud.endPublish();
+  g_cloudConfigPublished = true;
+  log_i("Configurazione Sheltr Cloud pubblicata su %s (%u byte)", topic.c_str(),
+        static_cast<unsigned>(length));
+}
+
+void handleCloudCommand(const uint8_t *payload, unsigned int length) {
+  uint8_t frame[protocol::FRAME_LEN];
+  if (!protocol::extractAny(payload, length, frame)) {
+    log_w("Payload cloud non valido (%u byte)", length);
+    return;
+  }
+  const devices::CommandResult result = devices::sendRawFrame(frame);
+  if (!result.ok || !result.responseHex.length()) {
+    log_w("Frame cloud senza risposta: %s", result.error.c_str());
+    return;
+  }
+  uint8_t response[protocol::FRAME_LEN];
+  if (!protocol::extractHex(result.responseHex.c_str(), result.responseHex.length(), response)) {
+    return;
+  }
+  const String out = protocol::formatPayload(response, cfg::config().cloud.payloadFormat);
+  const String topic = cfg::config().cloud.instanceId + "/pub";
+  g_cloud.publish(topic.c_str(), reinterpret_cast<const uint8_t *>(out.c_str()), out.length(),
+                  false);
+}
+
+void onLocalMessage(char *topic, uint8_t *payload, unsigned int length) {
+  String value;
+  value.reserve(length + 1);
+  for (unsigned int i = 0; i < length; i++) value += static_cast<char>(payload[i]);
+  handleLocalCommand(String(topic), value);
+}
+
+void onCloudMessage(char *topic, uint8_t *payload, unsigned int length) {
+  const String expected = cfg::config().cloud.instanceId + "/cmd";
+  if (expected != topic) return;
+  handleCloudCommand(payload, length);
+}
+
+void connectLocal() {
+  const cfg::MqttCfg &settings = cfg::config().mqtt;
+  g_local.setServer(settings.host.c_str(), settings.port);
+  g_local.setBufferSize(1024);
+  g_local.setKeepAlive(30);
+  g_local.setCallback(onLocalMessage);
+
+  const String clientId =
+      settings.clientId.length() ? settings.clientId : cfg::config().device.id;
+  const String willTopic = bridgeStatusTopic();
+  const bool connected =
+      settings.username.length()
+          ? g_local.connect(clientId.c_str(), settings.username.c_str(), settings.password.c_str(),
+                            willTopic.c_str(), 0, true, "offline")
+          : g_local.connect(clientId.c_str(), willTopic.c_str(), 0, true, "offline");
+
+  if (!connected) {
+    g_localFailures++;
+    g_localError = String(F("connessione fallita, stato ")) + g_local.state();
+    log_w("MQTT locale: %s", g_localError.c_str());
+    return;
+  }
+
+  g_localError = "";
+  log_i("MQTT locale connesso a %s:%u", settings.host.c_str(), settings.port);
+  publishLocal(willTopic, "online", true);
+
+  const String base = settings.baseTopic;
+  g_local.subscribe((base + "/poll_all/set").c_str());
+  g_local.subscribe((base + "/service/restart/set").c_str());
+  g_local.subscribe((base + "/+/+/set").c_str());
+  g_local.subscribe((base + "/+/+/+/set").c_str());
+
+  publishDiscovery();
+  devices::pollAll();
+  publishBoardStates();
+}
+
+void connectCloud() {
+  const cfg::CloudCfg &settings = cfg::config().cloud;
+  g_cloud.setServer(settings.host.c_str(), settings.port);
+  g_cloud.setBufferSize(2048);
+  g_cloud.setKeepAlive(45);
+  g_cloud.setCallback(onCloudMessage);
+
+  const String clientId = settings.instanceId + "-esp";
+  const String willTopic = cloudStatusTopic();
+  const bool connected =
+      settings.username.length()
+          ? g_cloud.connect(clientId.c_str(), settings.username.c_str(), settings.password.c_str(),
+                            willTopic.c_str(), 0, true, "offline")
+          : g_cloud.connect(clientId.c_str(), willTopic.c_str(), 0, true, "offline");
+
+  if (!connected) {
+    g_cloudFailures++;
+    g_cloudError = String(F("connessione fallita, stato ")) + g_cloud.state();
+    log_w("MQTT cloud: %s", g_cloudError.c_str());
+    return;
+  }
+
+  g_cloudError = "";
+  log_i("MQTT Sheltr Cloud connesso a %s:%u", settings.host.c_str(), settings.port);
+  g_cloud.publish(willTopic.c_str(), "online", true);
+  g_cloud.subscribe((settings.instanceId + "/cmd").c_str());
+  publishCloudConfig();
+}
+
+}  // namespace
+
+void begin() {
+  g_nextLocalAttempt = millis() + 3000;
+  g_nextCloudAttempt = millis() + 5000;
+}
+
+void reload() {
+  if (g_local.connected()) g_local.disconnect();
+  if (g_cloud.connected()) g_cloud.disconnect();
+  g_discoveryPublished = false;
+  g_cloudConfigPublished = false;
+  g_nextLocalAttempt = millis() + 500;
+  g_nextCloudAttempt = millis() + 800;
+}
+
+void publishStates() {
+  if (g_local.connected()) publishBoardStates();
+  g_publishedRevision = devices::stateRevision();
+}
+
+void loop() {
+  const cfg::Config &current = cfg::config();
+  const uint32_t now = millis();
+
+  if (current.mqtt.enabled && current.mqtt.host.length() && net::online()) {
+    if (g_local.connected()) {
+      g_local.loop();
+    } else if (static_cast<int32_t>(now - g_nextLocalAttempt) > 0) {
+      g_nextLocalAttempt = now + 8000;
+      connectLocal();
+    }
+  } else if (g_local.connected()) {
+    g_local.disconnect();
+  }
+
+  if (current.cloud.enabled && current.cloud.host.length() && net::online()) {
+    if (g_cloud.connected()) {
+      g_cloud.loop();
+      if (!g_cloudConfigPublished) publishCloudConfig();
+    } else if (static_cast<int32_t>(now - g_nextCloudAttempt) > 0) {
+      g_nextCloudAttempt = now + 10000;
+      connectCloud();
+    }
+  } else if (g_cloud.connected()) {
+    g_cloud.disconnect();
+  }
+
+  if (!g_local.connected()) return;
+
+  const bool intervalElapsed = static_cast<int32_t>(now - g_nextStatePublish) > 0;
+  const bool stateChanged = devices::stateRevision() != g_publishedRevision;
+  if (intervalElapsed || stateChanged) {
+    g_nextStatePublish = now + static_cast<uint32_t>(current.mqtt.stateIntervalSec) * 1000UL;
+    g_publishedRevision = devices::stateRevision();
+    publishBoardStates();
+  }
+}
+
+bool localConnected() { return g_local.connected(); }
+bool cloudConnected() { return g_cloud.connected(); }
+
+void statusJson(JsonObject out) {
+  const cfg::Config &current = cfg::config();
+  JsonObject local = out["local"].to<JsonObject>();
+  local["enabled"] = current.mqtt.enabled;
+  local["connected"] = g_local.connected();
+  local["host"] = current.mqtt.host;
+  local["port"] = current.mqtt.port;
+  local["baseTopic"] = current.mqtt.baseTopic;
+  local["discovery"] = current.mqtt.discovery;
+  local["discoveryPrefix"] = current.mqtt.discoveryPrefix;
+  local["discoveryPublished"] = g_discoveryPublished;
+  local["failures"] = g_localFailures;
+  local["lastError"] = g_localError;
+
+  JsonObject cloud = out["cloud"].to<JsonObject>();
+  cloud["enabled"] = current.cloud.enabled;
+  cloud["connected"] = g_cloud.connected();
+  cloud["host"] = current.cloud.host;
+  cloud["port"] = current.cloud.port;
+  cloud["instanceId"] = current.cloud.instanceId;
+  cloud["configTopic"] = current.cloud.instanceId + "/config";
+  cloud["commandTopic"] = current.cloud.instanceId + "/cmd";
+  cloud["responseTopic"] = current.cloud.instanceId + "/pub";
+  cloud["payloadFormat"] = current.cloud.payloadFormat;
+  cloud["configPublished"] = g_cloudConfigPublished;
+  cloud["failures"] = g_cloudFailures;
+  cloud["lastError"] = g_cloudError;
+}
+
+}  // namespace mqtt

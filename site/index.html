@@ -1,0 +1,150 @@
+<!doctype html>
+<html lang="it">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sheltr ESP · flash del firmware dal browser</title>
+<meta name="description" content="Installa il firmware Sheltr ESP sulla LilyGO T-ETH-Lite ESP32S3 direttamente dal browser, senza installare nulla." />
+<style>
+  :root {
+    --background: #ffffff;
+    --foreground: #111111;
+    --muted: #f4f4f4;
+    --muted-foreground: #5c5c5c;
+    --border: #c9c9c9;
+    --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+    --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--muted); color: var(--foreground);
+    font-family: var(--font-sans); font-size: 16px; line-height: 1.55;
+  }
+  header {
+    background: var(--background); border-bottom: 2px solid var(--border);
+  }
+  .wrap { max-width: 56rem; margin: 0 auto; padding: 1.25rem 1rem; }
+  h1 { margin: 0; font-size: 1.35rem; letter-spacing: -0.01em; }
+  h2 { font-size: 1.05rem; margin: 0 0 0.75rem; border-bottom: 2px solid var(--border); padding-bottom: 0.5rem; }
+  h3 { font-size: 0.95rem; margin: 1.25rem 0 0.35rem; }
+  p { margin: 0 0 0.75rem; }
+  code, .mono { font-family: var(--font-mono); font-size: 0.85em; background: var(--muted); padding: 0.1rem 0.3rem; }
+  pre { background: var(--background); border: 2px solid var(--border); padding: 0.75rem; overflow-x: auto; }
+  pre code { background: none; padding: 0; }
+  section { background: var(--background); border: 2px solid var(--border); padding: 1.25rem; margin: 1.25rem 0; }
+  ul, ol { margin: 0 0 0.75rem; padding-left: 1.2rem; }
+  li { margin-bottom: 0.3rem; }
+  a { color: #0f172a; }
+  .lead { color: var(--muted-foreground); }
+  .flash { display: flex; flex-wrap: wrap; gap: 1rem; align-items: center; }
+  esp-web-install-button { --esp-tools-button-color: #fafafa; --esp-tools-button-text-color: #111; }
+  .fallback { border: 2px solid #f59e0b; background: #fffbeb; padding: 0.75rem; font-size: 0.9rem; }
+  .grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(15rem, 1fr)); }
+  .card { border: 2px solid var(--border); padding: 0.85rem; }
+  .card strong { display: block; margin-bottom: 0.25rem; }
+  footer { text-align: center; color: var(--muted-foreground); font-size: 0.85rem; padding: 2rem 1rem 3rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { border: 1px solid var(--border); padding: 0.35rem 0.5rem; text-align: left; }
+  th { background: var(--muted); font-size: 0.78rem; text-transform: uppercase; letter-spacing: 0.05em; }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>Sheltr ESP</h1>
+    <p class="lead" style="margin:0">Gateway locale del protocollo Sheltr 1.6 per LilyGO T-ETH-Lite ESP32S3 — interfaccia web, MQTT per Home Assistant, ponte verso Sheltr Cloud.</p>
+  </div>
+</header>
+
+<main class="wrap">
+  <section>
+    <h2>1 · Installa il firmware dal browser</h2>
+    <p>Collega la scheda al computer via USB e premi il pulsante. Serve <strong>Chrome</strong>, <strong>Edge</strong> o <strong>Opera</strong> su desktop (Web Serial non è supportato da Safari e Firefox).</p>
+    <div class="flash">
+      <esp-web-install-button manifest="./manifest.json">
+        <button slot="activate" style="font:inherit;font-weight:600;border:2px solid #111;background:#111;color:#fff;padding:0.6rem 1.1rem;cursor:pointer">
+          Installa Sheltr ESP
+        </button>
+        <span slot="unsupported" class="fallback">
+          Questo browser non supporta Web Serial: apri la pagina con Chrome o Edge da computer.
+        </span>
+        <span slot="not-allowed" class="fallback">
+          La pagina deve essere servita in HTTPS per accedere alla porta seriale.
+        </span>
+      </esp-web-install-button>
+      <span class="lead">Versione pubblicata: <span class="mono" id="version">…</span></span>
+    </div>
+
+    <h3>Se la scheda non compare</h3>
+    <ul>
+      <li>La T-ETH-Lite ESP32S3 <strong>non ha un convertitore USB-seriale a bordo</strong>: usa la porta USB nativa (header <code>USB_D+/USB_D-</code>) oppure un programmatore esterno (CH340/CP2102) sui pin <code>TXD/RXD</code>.</li>
+      <li>Con il programmatore esterno tieni premuto <code>IO0</code> mentre premi <code>RST</code> per entrare in modalità download.</li>
+      <li>Su macOS e Linux può servire il driver del convertitore; su Windows controlla in Gestione dispositivi che la porta COM sia presente.</li>
+    </ul>
+
+    <h3>Alternativa da riga di comando</h3>
+    <pre><code>esptool.py --chip esp32s3 --port /dev/ttyUSB0 --baud 921600 write_flash 0x0 sheltr-esp-merged.bin</code></pre>
+    <p class="lead">Il binario unito è scaricabile da <a href="./firmware/sheltr-esp-merged.bin">firmware/sheltr-esp-merged.bin</a> o dalle <a href="https://github.com/filippobenozzi/sheltr-esp/releases">release del repository</a>.</p>
+  </section>
+
+  <section>
+    <h2>2 · Primo avvio</h2>
+    <div class="grid">
+      <div class="card">
+        <strong>Con cavo Ethernet</strong>
+        Collega il cavo di rete: il gateway prende un indirizzo in DHCP e risponde su <code>http://sheltr.local</code>.
+      </div>
+      <div class="card">
+        <strong>Senza rete cablata</strong>
+        Dopo 20 secondi si accende l'hotspot <code>Sheltr-XXXX</code> (password <code>sheltr1234</code>): collegati e si apre da solo il portale di configurazione su <code>192.168.4.1</code>.
+      </div>
+      <div class="card">
+        <strong>WiFi</strong>
+        Dal portale scegli la rete, inserisci la password e premi «Connetti ora». L'hotspot si spegne appena la connessione riesce.
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <h2>3 · Collegamento al bus Sheltr</h2>
+    <p>Il firmware parla il protocollo 1.6 su seriale 9600 8N1. I pin sono configurabili dall'interfaccia (Configurazione → Bus seriale); i valori di fabbrica sono:</p>
+    <table>
+      <tr><th>Segnale</th><th>GPIO</th><th>Connettore</th></tr>
+      <tr><td>TX verso le schede</td><td>17</td><td>P2</td></tr>
+      <tr><td>RX dalle schede</td><td>18</td><td>P2</td></tr>
+      <tr><td>DE/RE (solo RS485)</td><td>-1 (disattivato)</td><td>—</td></tr>
+    </table>
+    <p class="lead" style="margin-top:0.75rem">Con bus RS485 aggiungi un transceiver (MAX3485 o simili) e imposta il pin DE/RE; con collegamento TTL usa direttamente TX/RX e la massa comune.</p>
+  </section>
+
+  <section>
+    <h2>4 · Documentazione</h2>
+    <ul>
+      <li><a href="https://github.com/filippobenozzi/sheltr-esp#readme">Panoramica e avvio rapido</a></li>
+      <li><a href="https://github.com/filippobenozzi/sheltr-esp/blob/main/docs/01-installazione.md">Installazione e flash</a></li>
+      <li><a href="https://github.com/filippobenozzi/sheltr-esp/blob/main/docs/02-rete-e-provisioning.md">Rete, hotspot e sheltr.local</a></li>
+      <li><a href="https://github.com/filippobenozzi/sheltr-esp/blob/main/docs/03-configurazione.md">Configurazione schede e stanze</a></li>
+      <li><a href="https://github.com/filippobenozzi/sheltr-esp/blob/main/docs/04-protocollo.md">Protocollo Sheltr 1.6</a></li>
+      <li><a href="https://github.com/filippobenozzi/sheltr-esp/blob/main/docs/05-api.md">API HTTP</a></li>
+      <li><a href="https://github.com/filippobenozzi/sheltr-esp/blob/main/docs/06-mqtt-home-assistant.md">MQTT e Home Assistant</a></li>
+      <li><a href="https://github.com/filippobenozzi/sheltr-esp/blob/main/docs/07-sheltr-cloud.md">Integrazione con Sheltr Cloud</a></li>
+      <li><a href="https://github.com/filippobenozzi/sheltr-esp/blob/main/docs/08-hardware.md">Hardware e cablaggio</a></li>
+      <li><a href="https://github.com/filippobenozzi/sheltr-esp/blob/main/docs/09-sviluppo.md">Compilazione e sviluppo</a></li>
+      <li><a href="https://github.com/filippobenozzi/sheltr-esp/blob/main/docs/10-diagnostica.md">Diagnostica e problemi comuni</a></li>
+    </ul>
+  </section>
+</main>
+
+<footer>
+  <a href="https://github.com/filippobenozzi/sheltr-esp">github.com/filippobenozzi/sheltr-esp</a> · MIT
+</footer>
+
+<script type="module" src="https://unpkg.com/esp-web-tools@10/dist/web/install-button.js"></script>
+<script>
+  fetch("./manifest.json")
+    .then((response) => response.json())
+    .then((data) => { document.getElementById("version").textContent = data.version || "—"; })
+    .catch(() => { document.getElementById("version").textContent = "non disponibile"; });
+</script>
+</body>
+</html>

@@ -1,0 +1,7 @@
+.pio/
+.vscode/
+.DS_Store
+src/generated/
+*.bin.bak
+site/firmware/
+site/manifest.json

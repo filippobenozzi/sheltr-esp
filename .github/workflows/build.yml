@@ -1,0 +1,138 @@
+name: Build firmware
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sheltr-esp-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Compila firmware (T-ETH-Lite-ESP32S3)
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - name: Cache PlatformIO
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.platformio
+            ~/.cache/pip
+          key: pio-${{ runner.os }}-${{ hashFiles('platformio.ini') }}
+          restore-keys: pio-${{ runner.os }}-
+
+      - name: Installa PlatformIO
+        run: pip install --upgrade platformio
+
+      - name: Versione firmware
+        id: version
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
+            VERSION="${GITHUB_REF#refs/tags/v}"
+          else
+            VERSION="$(grep -o "SHELTR_FW_VERSION='\"[^\"]*\"'" platformio.ini | head -1 | sed "s/.*'\"//;s/\"'//")+${GITHUB_SHA::7}"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Versione: ${VERSION}"
+
+      - name: Compila
+        run: pio run -e t-eth-lite-esp32s3
+
+      - name: Prepara artefatti
+        run: |
+          mkdir -p dist
+          BUILD=.pio/build/t-eth-lite-esp32s3
+          cp "$BUILD/firmware.bin" "dist/sheltr-esp-firmware.bin"
+          cp "$BUILD/sheltr-esp-merged.bin" "dist/sheltr-esp-merged.bin"
+          cp "$BUILD/bootloader.bin" "dist/bootloader.bin"
+          cp "$BUILD/partitions.bin" "dist/partitions.bin"
+          ls -la dist
+
+      - name: Pubblica artefatti di build
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware
+          path: dist/
+          retention-days: 30
+
+  pages:
+    name: Pubblica web flasher su GitHub Pages
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: dist
+
+      - name: Costruisci il sito
+        env:
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          mkdir -p _site/firmware
+          cp -r site/* _site/
+          cp dist/sheltr-esp-merged.bin _site/firmware/
+          cp dist/sheltr-esp-firmware.bin _site/firmware/
+          mkdir -p _site/docs
+          cp -r docs/* _site/docs/
+          cp README.md _site/docs/
+          sed "s/__VERSION__/${VERSION}/g" site/manifest.template.json > _site/manifest.json
+          rm -f _site/manifest.template.json
+          echo "${VERSION}" > _site/firmware/VERSION
+          ls -R _site | head -50
+
+      - uses: actions/configure-pages@v5
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+      - id: deployment
+        uses: actions/deploy-pages@v4
+
+  release:
+    name: Allega i binari alla release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: dist
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            dist/sheltr-esp-merged.bin
+            dist/sheltr-esp-firmware.bin
+          body: |
+            Firmware Sheltr ESP ${{ needs.build.outputs.version }} per LilyGO T-ETH-Lite ESP32S3.
+
+            - `sheltr-esp-merged.bin`: immagine completa (bootloader + partizioni + app), da scrivere a offset `0x0`
+              oppure direttamente dal browser su https://filippobenozzi.github.io/sheltr-esp/
+            - `sheltr-esp-firmware.bin`: solo applicazione, per l'aggiornamento OTA dall'interfaccia web

@@ -1,0 +1,14 @@
+{
+  "name": "Sheltr ESP",
+  "version": "__VERSION__",
+  "funding_url": "https://github.com/filippobenozzi/sheltr-esp",
+  "new_install_prompt_erase": true,
+  "builds": [
+    {
+      "chipFamily": "ESP32-S3",
+      "parts": [
+        { "path": "firmware/sheltr-esp-merged.bin", "offset": 0 }
+      ]
+    }
+  ]
+}

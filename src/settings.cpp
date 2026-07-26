@@ -1,0 +1,650 @@
+#include "settings.h"
+
+#include <LittleFS.h>
+
+#include "board_pins.h"
+#include "json_utils.h"
+
+namespace cfg {
+
+const char *ROOM_PALETTE[10] = {
+    "#f9d5d3",  // rosa corallo
+    "#fde2c8",  // pesca
+    "#faf3c0",  // giallo crema
+    "#d9efd3",  // verde menta
+    "#c9e9e3",  // acqua
+    "#d4e5f7",  // azzurro polvere
+    "#dcd6f7",  // lilla
+    "#f3d9ec",  // rosa orchidea
+    "#ece0d1",  // sabbia
+    "#e3e7ee",  // grigio perla
+};
+
+namespace {
+
+constexpr const char *CONFIG_PATH = "/config.json";
+Config g_config;
+
+int toInt(JsonVariantConst value, int fallback) {
+  if (value.is<int>() || value.is<float>()) return value.as<int>();
+  if (value.is<const char *>()) {
+    const char *text = value.as<const char *>();
+    if (text == nullptr || *text == '\0') return fallback;
+    return atoi(text);
+  }
+  if (value.is<bool>()) return value.as<bool>() ? 1 : 0;
+  return fallback;
+}
+
+float toFloat(JsonVariantConst value, float fallback) {
+  if (value.is<float>() || value.is<int>()) return value.as<float>();
+  if (value.is<const char *>()) {
+    String text = value.as<const char *>();
+    text.replace(',', '.');
+    if (!text.length()) return fallback;
+    return text.toFloat();
+  }
+  return fallback;
+}
+
+bool toBool(JsonVariantConst value, bool fallback) {
+  if (value.is<bool>()) return value.as<bool>();
+  if (value.is<int>()) return value.as<int>() != 0;
+  if (value.is<const char *>()) {
+    String text = value.as<const char *>();
+    text.toLowerCase();
+    if (text == "1" || text == "true" || text == "on" || text == "yes") return true;
+    if (text == "0" || text == "false" || text == "off" || text == "no") return false;
+  }
+  return fallback;
+}
+
+String toText(JsonVariantConst value, const String &fallback) {
+  if (value.is<const char *>()) {
+    String text = value.as<const char *>();
+    text.trim();
+    return text.length() ? text : fallback;
+  }
+  if (value.is<int>() || value.is<float>()) return String(value.as<float>(), 0);
+  return fallback;
+}
+
+String normalizeTime(const String &value, const String &fallback) {
+  int colon = value.indexOf(':');
+  if (colon <= 0) return fallback;
+  int hours = value.substring(0, colon).toInt();
+  int minutes = value.substring(colon + 1).toInt();
+  if (hours < 0 || hours > 23 || minutes < 0 || minutes > 59) return fallback;
+  char buffer[6];
+  snprintf(buffer, sizeof(buffer), "%02d:%02d", hours, minutes);
+  return String(buffer);
+}
+
+uint8_t normalizeDays(JsonVariantConst value) {
+  if (value.is<JsonArrayConst>()) {
+    uint8_t mask = 0;
+    for (JsonVariantConst item : value.as<JsonArrayConst>()) {
+      const int day = toInt(item, 0);
+      if (day >= 1 && day <= 7) mask |= (1 << (day - 1));
+    }
+    return mask ? mask : 0x7F;
+  }
+  if (value.is<int>()) {
+    const uint8_t mask = static_cast<uint8_t>(value.as<int>()) & 0x7F;
+    return mask ? mask : 0x7F;
+  }
+  return 0x7F;
+}
+
+void daysToJson(uint8_t mask, JsonArray out) {
+  for (uint8_t day = 1; day <= 7; day++) {
+    if (mask & (1 << (day - 1))) out.add(day);
+  }
+}
+
+String defaultDeviceId() {
+  const uint64_t mac = ESP.getEfuseMac();
+  char buffer[24];
+  snprintf(buffer, sizeof(buffer), "sheltr-%02x%02x%02x", static_cast<uint8_t>(mac >> 24),
+           static_cast<uint8_t>(mac >> 32), static_cast<uint8_t>(mac >> 40));
+  return String(buffer);
+}
+
+void applyDefaults(Config &target, bool keepNetwork) {
+  NetworkCfg network = target.network;
+  target = Config();
+  target.device.id = defaultDeviceId();
+  target.device.name = "Sheltr ESP";
+  target.bus.tx = SHELTR_BUS_TX_DEFAULT;
+  target.bus.rx = SHELTR_BUS_RX_DEFAULT;
+  target.bus.de = SHELTR_BUS_DE_DEFAULT;
+  target.cloud.instanceId = target.device.id;
+  target.cloud.instanceName = target.device.name;
+  target.mqtt.clientId = target.device.id;
+  if (keepNetwork) {
+    target.network = network;
+  } else {
+    target.network.hostname = "sheltr";
+  }
+
+  Board board;
+  board.id = "board-1";
+  board.name = "Scheda Luci";
+  board.kind = "light";
+  board.address = 1;
+  board.channelStart = 1;
+  board.channelEnd = 8;
+  for (uint8_t channel = 1; channel <= 8; channel++) {
+    Channel item;
+    item.channel = channel;
+    item.name = defaultChannelName(board.kind, channel);
+    item.room = "Senza stanza";
+    board.channels.push_back(item);
+  }
+  target.boards.push_back(board);
+}
+
+void parseProfile(JsonVariantConst raw, const String &kind, Profile &profile) {
+  profile.enabled = false;
+  profile.entries.clear();
+  if (!raw.is<JsonObjectConst>()) return;
+  JsonObjectConst input = raw.as<JsonObjectConst>();
+  profile.enabled = toBool(input["enabled"], false);
+  JsonArrayConst entries = input["entries"].as<JsonArrayConst>();
+  if (entries.isNull()) return;
+  for (JsonVariantConst item : entries) {
+    if (!item.is<JsonObjectConst>()) continue;
+    JsonObjectConst entry = item.as<JsonObjectConst>();
+    ProfileEntry parsed;
+    parsed.days = normalizeDays(entry["days"]);
+    if (kind == "thermostat") {
+      parsed.from = normalizeTime(toText(entry["from"], "00:00"), "00:00");
+      parsed.to = normalizeTime(toText(entry["to"], "23:59"), "23:59");
+      parsed.setpoint = constrain(toFloat(entry["setpoint"], 21.0f), 5.0f, 30.0f);
+      String mode = toText(entry["mode"], "winter");
+      mode.toLowerCase();
+      parsed.mode = (mode == "summer" || mode == "estate") ? "summer" : "winter";
+    } else {
+      parsed.time = normalizeTime(toText(entry["time"], "00:00"), "00:00");
+      String action = toText(entry["action"], kind == "shutter" ? "down" : "off");
+      action.toLowerCase();
+      if (kind == "shutter") {
+        parsed.action = (action == "up") ? "up" : "down";
+      } else {
+        parsed.action = (action == "on") ? "on" : "off";
+      }
+    }
+    profile.entries.push_back(parsed);
+    if (profile.entries.size() >= 24) break;
+  }
+}
+
+void profileToJson(const Profile &profile, const String &kind, JsonObject out) {
+  out["enabled"] = profile.enabled;
+  JsonArray entries = out["entries"].to<JsonArray>();
+  for (const ProfileEntry &entry : profile.entries) {
+    JsonObject item = entries.add<JsonObject>();
+    if (kind == "thermostat") {
+      item["from"] = entry.from;
+      item["to"] = entry.to;
+      item["setpoint"] = entry.setpoint;
+      item["mode"] = entry.mode;
+    } else {
+      item["time"] = entry.time;
+      item["action"] = entry.action;
+    }
+    daysToJson(entry.days, item["days"].to<JsonArray>());
+  }
+}
+
+void parseBoards(JsonArrayConst input, std::vector<Board> &boards) {
+  boards.clear();
+  if (input.isNull()) return;
+  size_t index = 0;
+  for (JsonVariantConst raw : input) {
+    if (!raw.is<JsonObjectConst>()) continue;
+    JsonObjectConst item = raw.as<JsonObjectConst>();
+    Board board;
+    index++;
+    board.kind = toText(item["kind"], "light");
+    board.kind.toLowerCase();
+    if (board.kind != "light" && board.kind != "shutter" && board.kind != "dimmer" &&
+        board.kind != "thermostat") {
+      board.kind = "light";
+    }
+    const uint8_t maxChannels = maxChannelsForKind(board.kind);
+    board.id = slugify(toText(item["id"], ""), String("board-") + index);
+    board.name = toText(item["name"], board.id);
+    board.address = constrain(toInt(item["address"], index), 0, 254);
+    board.channelStart = constrain(toInt(item["channelStart"], 1), 1, maxChannels);
+    board.channelEnd = constrain(toInt(item["channelEnd"], maxChannels), board.channelStart,
+                                 maxChannels);
+
+    std::map<uint8_t, JsonObjectConst> saved;
+    JsonArrayConst channels = item["channels"].as<JsonArrayConst>();
+    if (!channels.isNull()) {
+      for (JsonVariantConst channelRaw : channels) {
+        if (!channelRaw.is<JsonObjectConst>()) continue;
+        JsonObjectConst channelItem = channelRaw.as<JsonObjectConst>();
+        const int number = toInt(channelItem["channel"], -1);
+        if (number >= 1 && number <= maxChannels) saved[static_cast<uint8_t>(number)] = channelItem;
+      }
+    }
+
+    for (uint8_t number = board.channelStart; number <= board.channelEnd; number++) {
+      Channel channel;
+      channel.channel = number;
+      auto found = saved.find(number);
+      if (found != saved.end()) {
+        channel.name = toText(found->second["name"], defaultChannelName(board.kind, number));
+        channel.room = toText(found->second["room"], "Senza stanza");
+        parseProfile(found->second["profile"], board.kind, channel.profile);
+      } else {
+        channel.name = defaultChannelName(board.kind, number);
+        channel.room = "Senza stanza";
+      }
+      board.channels.push_back(channel);
+    }
+    boards.push_back(board);
+    if (boards.size() >= 32) break;
+  }
+}
+
+}  // namespace
+
+Config &config() { return g_config; }
+
+String cleanText(const String &value, const String &fallback) {
+  String text = value;
+  text.trim();
+  return text.length() ? text : fallback;
+}
+
+String slugify(const String &value, const String &fallback) {
+  String out;
+  bool lastDash = false;
+  for (size_t i = 0; i < value.length(); i++) {
+    const char c = value[i];
+    if (isalnum(static_cast<unsigned char>(c))) {
+      out += static_cast<char>(tolower(c));
+      lastDash = false;
+    } else if (!lastDash && out.length()) {
+      out += '-';
+      lastDash = true;
+    }
+  }
+  while (out.endsWith("-")) out.remove(out.length() - 1);
+  return out.length() ? out : fallback;
+}
+
+uint8_t maxChannelsForKind(const String &kind) {
+  if (kind == "shutter") return 4;
+  if (kind == "dimmer") return 1;
+  if (kind == "thermostat") return 1;
+  return 8;
+}
+
+String defaultChannelName(const String &kind, uint8_t channel) {
+  if (kind == "shutter") return String("Tapparella ") + channel;
+  if (kind == "dimmer") return String("Dimmer ") + channel;
+  if (kind == "thermostat") return String("Termostato ") + channel;
+  return String("Luce ") + channel;
+}
+
+String kindLabel(const String &kind) {
+  if (kind == "shutter") return "Tapparelle";
+  if (kind == "dimmer") return "Dimmer";
+  if (kind == "thermostat") return "Termostati";
+  return "Luci";
+}
+
+String entityId(const String &boardId, uint8_t channel) {
+  return boardId + "-c" + String(channel);
+}
+
+String roomColor(const String &room) {
+  auto found = g_config.roomColors.find(room);
+  if (found != g_config.roomColors.end()) return found->second;
+  // Colore stabile derivato dal nome, come nel portale.
+  uint32_t hash = 2166136261u;
+  for (size_t i = 0; i < room.length(); i++) {
+    hash ^= static_cast<uint8_t>(room[i]);
+    hash *= 16777619u;
+  }
+  return ROOM_PALETTE[hash % ROOM_PALETTE_SIZE];
+}
+
+void setRoomColor(const String &room, const String &color) {
+  if (!room.length()) return;
+  g_config.roomColors[room] = color;
+}
+
+Board *findBoard(const String &boardId) {
+  for (Board &board : g_config.boards) {
+    if (board.id == boardId) return &board;
+  }
+  return nullptr;
+}
+
+Board *findBoardByAddress(uint8_t address) {
+  for (Board &board : g_config.boards) {
+    if (board.address == address) return &board;
+  }
+  return nullptr;
+}
+
+Channel *findChannel(const String &id, Board **boardOut) {
+  for (Board &board : g_config.boards) {
+    for (Channel &channel : board.channels) {
+      if (entityId(board.id, channel.channel) == id) {
+        if (boardOut != nullptr) *boardOut = &board;
+        return &channel;
+      }
+    }
+  }
+  return nullptr;
+}
+
+std::vector<uint8_t> allAddresses() {
+  std::vector<uint8_t> addresses;
+  for (const Board &board : g_config.boards) {
+    bool present = false;
+    for (uint8_t value : addresses) {
+      if (value == board.address) present = true;
+    }
+    if (!present) addresses.push_back(board.address);
+  }
+  return addresses;
+}
+
+void resetDefaults(bool keepNetwork) {
+  applyDefaults(g_config, keepNetwork);
+  g_config.revision++;
+}
+
+bool applyJson(JsonObjectConst input, String &error) {
+  if (input.isNull()) {
+    error = F("payload non valido");
+    return false;
+  }
+
+  Config next = g_config;
+
+  if (input["device"].is<JsonObjectConst>()) {
+    JsonObjectConst device = input["device"];
+    next.device.id = slugify(toText(device["id"], next.device.id), next.device.id);
+    next.device.name = toText(device["name"], next.device.name);
+  }
+
+  if (input["auth"].is<JsonObjectConst>()) {
+    JsonObjectConst auth = input["auth"];
+    next.auth.enabled = toBool(auth["enabled"], next.auth.enabled);
+    next.auth.username = toText(auth["username"], next.auth.username);
+    const String password = toText(auth["password"], "");
+    if (password.length() && password != "********") next.auth.password = password;
+  }
+
+  if (input["bus"].is<JsonObjectConst>()) {
+    JsonObjectConst bus = input["bus"];
+    next.bus.tx = constrain(toInt(bus["tx"], next.bus.tx), -1, 48);
+    next.bus.rx = constrain(toInt(bus["rx"], next.bus.rx), -1, 48);
+    next.bus.de = constrain(toInt(bus["de"], next.bus.de), -1, 48);
+    next.bus.baud = constrain(toInt(bus["baud"], next.bus.baud), 1200, 115200);
+    next.bus.timeoutMs = constrain(toInt(bus["timeoutMs"], next.bus.timeoutMs), 100, 8000);
+    next.bus.retries = constrain(toInt(bus["retries"], next.bus.retries), 0, 5);
+    next.bus.pollIntervalSec = constrain(toInt(bus["pollIntervalSec"], next.bus.pollIntervalSec), 0,
+                                         3600);
+  }
+
+  if (input["network"].is<JsonObjectConst>()) {
+    JsonObjectConst network = input["network"];
+    next.network.hostname = slugify(toText(network["hostname"], next.network.hostname), "sheltr");
+    next.network.wifiSsid = toText(network["wifiSsid"], next.network.wifiSsid);
+    const String wifiPassword = toText(network["wifiPassword"], "");
+    if (wifiPassword.length() && wifiPassword != "********") {
+      next.network.wifiPassword = wifiPassword;
+    }
+    if (network["wifiSsid"].is<const char *>() && !toText(network["wifiSsid"], "").length()) {
+      next.network.wifiSsid = "";
+      next.network.wifiPassword = "";
+    }
+    next.network.apSsid = toText(network["apSsid"], next.network.apSsid);
+    const String apPassword = toText(network["apPassword"], "");
+    if (apPassword.length() && apPassword != "********") next.network.apPassword = apPassword;
+    next.network.apFallback = toBool(network["apFallback"], next.network.apFallback);
+    next.network.ethEnabled = toBool(network["ethEnabled"], next.network.ethEnabled);
+    next.network.dhcp = toBool(network["dhcp"], next.network.dhcp);
+    next.network.ip = toText(network["ip"], next.network.ip);
+    next.network.gateway = toText(network["gateway"], next.network.gateway);
+    next.network.subnet = toText(network["subnet"], next.network.subnet);
+    next.network.dns1 = toText(network["dns1"], next.network.dns1);
+    next.network.dns2 = toText(network["dns2"], next.network.dns2);
+  }
+
+  if (input["ntp"].is<JsonObjectConst>()) {
+    JsonObjectConst ntp = input["ntp"];
+    next.ntp.enabled = toBool(ntp["enabled"], next.ntp.enabled);
+    next.ntp.server = toText(ntp["server"], next.ntp.server);
+    next.ntp.tz = toText(ntp["tz"], next.ntp.tz);
+  }
+
+  if (input["mqtt"].is<JsonObjectConst>()) {
+    JsonObjectConst mqtt = input["mqtt"];
+    next.mqtt.enabled = toBool(mqtt["enabled"], next.mqtt.enabled);
+    next.mqtt.host = toText(mqtt["host"], next.mqtt.host);
+    next.mqtt.port = constrain(toInt(mqtt["port"], next.mqtt.port), 1, 65535);
+    next.mqtt.username = toText(mqtt["username"], next.mqtt.username);
+    const String password = toText(mqtt["password"], "");
+    if (password.length() && password != "********") next.mqtt.password = password;
+    if (mqtt["password"].is<const char *>() && !toText(mqtt["password"], "").length()) {
+      next.mqtt.password = "";
+    }
+    next.mqtt.clientId = toText(mqtt["clientId"], next.mqtt.clientId);
+    next.mqtt.baseTopic = cleanText(toText(mqtt["baseTopic"], next.mqtt.baseTopic), "sheltr");
+    next.mqtt.discovery = toBool(mqtt["discovery"], next.mqtt.discovery);
+    next.mqtt.discoveryPrefix =
+        cleanText(toText(mqtt["discoveryPrefix"], next.mqtt.discoveryPrefix), "homeassistant");
+    next.mqtt.retain = toBool(mqtt["retain"], next.mqtt.retain);
+    next.mqtt.qos = constrain(toInt(mqtt["qos"], next.mqtt.qos), 0, 1);
+    next.mqtt.stateIntervalSec =
+        constrain(toInt(mqtt["stateIntervalSec"], next.mqtt.stateIntervalSec), 5, 3600);
+  }
+
+  if (input["cloud"].is<JsonObjectConst>()) {
+    JsonObjectConst cloud = input["cloud"];
+    next.cloud.enabled = toBool(cloud["enabled"], next.cloud.enabled);
+    next.cloud.host = toText(cloud["host"], next.cloud.host);
+    next.cloud.port = constrain(toInt(cloud["port"], next.cloud.port), 1, 65535);
+    next.cloud.username = toText(cloud["username"], next.cloud.username);
+    const String password = toText(cloud["password"], "");
+    if (password.length() && password != "********") next.cloud.password = password;
+    if (cloud["password"].is<const char *>() && !toText(cloud["password"], "").length()) {
+      next.cloud.password = "";
+    }
+    next.cloud.instanceId =
+        slugify(toText(cloud["instanceId"], next.cloud.instanceId), next.device.id);
+    next.cloud.instanceName = toText(cloud["instanceName"], next.cloud.instanceName);
+    String format = toText(cloud["payloadFormat"], next.cloud.payloadFormat);
+    format.toLowerCase();
+    if (format == "frame_hex_space" || format == "frame_hex_compact" ||
+        format == "frame_hex_space_crlf" || format == "frame_hex_compact_crlf") {
+      next.cloud.payloadFormat = format;
+    }
+  }
+
+  if (input["roomColors"].is<JsonObjectConst>()) {
+    next.roomColors.clear();
+    for (JsonPairConst pair : input["roomColors"].as<JsonObjectConst>()) {
+      const String color = toText(pair.value(), "");
+      if (color.startsWith("#") && (color.length() == 7 || color.length() == 4)) {
+        next.roomColors[String(pair.key().c_str())] = color;
+      }
+    }
+  }
+
+  if (input["boards"].is<JsonArrayConst>()) {
+    parseBoards(input["boards"].as<JsonArrayConst>(), next.boards);
+    if (next.boards.empty()) {
+      error = F("configura almeno una scheda");
+      return false;
+    }
+  }
+
+  next.revision = g_config.revision + 1;
+  g_config = next;
+  return true;
+}
+
+void toJson(JsonObject out, bool includeSecrets) {
+  const Config &current = g_config;
+  out["revision"] = current.revision;
+
+  JsonObject device = out["device"].to<JsonObject>();
+  device["id"] = current.device.id;
+  device["name"] = current.device.name;
+
+  JsonObject auth = out["auth"].to<JsonObject>();
+  auth["enabled"] = current.auth.enabled;
+  auth["username"] = current.auth.username;
+  auth["password"] = includeSecrets ? current.auth.password : String("********");
+
+  JsonObject bus = out["bus"].to<JsonObject>();
+  bus["tx"] = current.bus.tx;
+  bus["rx"] = current.bus.rx;
+  bus["de"] = current.bus.de;
+  bus["baud"] = current.bus.baud;
+  bus["timeoutMs"] = current.bus.timeoutMs;
+  bus["retries"] = current.bus.retries;
+  bus["pollIntervalSec"] = current.bus.pollIntervalSec;
+
+  JsonObject network = out["network"].to<JsonObject>();
+  network["hostname"] = current.network.hostname;
+  network["wifiSsid"] = current.network.wifiSsid;
+  network["wifiPassword"] =
+      includeSecrets ? current.network.wifiPassword
+                     : String(current.network.wifiPassword.length() ? "********" : "");
+  network["apSsid"] = current.network.apSsid;
+  network["apPassword"] = includeSecrets ? current.network.apPassword : String("********");
+  network["apFallback"] = current.network.apFallback;
+  network["ethEnabled"] = current.network.ethEnabled;
+  network["dhcp"] = current.network.dhcp;
+  network["ip"] = current.network.ip;
+  network["gateway"] = current.network.gateway;
+  network["subnet"] = current.network.subnet;
+  network["dns1"] = current.network.dns1;
+  network["dns2"] = current.network.dns2;
+
+  JsonObject ntp = out["ntp"].to<JsonObject>();
+  ntp["enabled"] = current.ntp.enabled;
+  ntp["server"] = current.ntp.server;
+  ntp["tz"] = current.ntp.tz;
+
+  JsonObject mqtt = out["mqtt"].to<JsonObject>();
+  mqtt["enabled"] = current.mqtt.enabled;
+  mqtt["host"] = current.mqtt.host;
+  mqtt["port"] = current.mqtt.port;
+  mqtt["username"] = current.mqtt.username;
+  mqtt["password"] =
+      includeSecrets ? current.mqtt.password : String(current.mqtt.password.length() ? "********" : "");
+  mqtt["clientId"] = current.mqtt.clientId;
+  mqtt["baseTopic"] = current.mqtt.baseTopic;
+  mqtt["discovery"] = current.mqtt.discovery;
+  mqtt["discoveryPrefix"] = current.mqtt.discoveryPrefix;
+  mqtt["retain"] = current.mqtt.retain;
+  mqtt["qos"] = current.mqtt.qos;
+  mqtt["stateIntervalSec"] = current.mqtt.stateIntervalSec;
+
+  JsonObject cloud = out["cloud"].to<JsonObject>();
+  cloud["enabled"] = current.cloud.enabled;
+  cloud["host"] = current.cloud.host;
+  cloud["port"] = current.cloud.port;
+  cloud["username"] = current.cloud.username;
+  cloud["password"] = includeSecrets ? current.cloud.password
+                                     : String(current.cloud.password.length() ? "********" : "");
+  cloud["instanceId"] = current.cloud.instanceId;
+  cloud["instanceName"] = current.cloud.instanceName;
+  cloud["payloadFormat"] = current.cloud.payloadFormat;
+  cloud["configTopic"] = current.cloud.instanceId + "/config";
+  cloud["commandTopic"] = current.cloud.instanceId + "/cmd";
+  cloud["responseTopic"] = current.cloud.instanceId + "/pub";
+
+  JsonObject roomColors = out["roomColors"].to<JsonObject>();
+  for (const auto &pair : current.roomColors) roomColors[pair.first] = pair.second;
+
+  JsonArray palette = out["roomPalette"].to<JsonArray>();
+  for (size_t i = 0; i < ROOM_PALETTE_SIZE; i++) palette.add(ROOM_PALETTE[i]);
+
+  JsonArray boards = out["boards"].to<JsonArray>();
+  for (const Board &board : current.boards) {
+    JsonObject item = boards.add<JsonObject>();
+    item["id"] = board.id;
+    item["name"] = board.name;
+    item["kind"] = board.kind;
+    item["address"] = board.address;
+    item["channelStart"] = board.channelStart;
+    item["channelEnd"] = board.channelEnd;
+    JsonArray channels = item["channels"].to<JsonArray>();
+    for (const Channel &channel : board.channels) {
+      JsonObject entry = channels.add<JsonObject>();
+      entry["channel"] = channel.channel;
+      entry["name"] = channel.name;
+      entry["room"] = channel.room;
+      profileToJson(channel.profile, board.kind, entry["profile"].to<JsonObject>());
+    }
+  }
+}
+
+bool save() {
+  File file = LittleFS.open(CONFIG_PATH, "w");
+  if (!file) {
+    log_e("Impossibile aprire %s in scrittura", CONFIG_PATH);
+    return false;
+  }
+  JsonDocument doc(&SpiRamAllocator::instance());
+  JsonObject root = doc.to<JsonObject>();
+  toJson(root, true);
+  const size_t written = serializeJson(doc, file);
+  file.close();
+  log_i("Configurazione salvata (%u byte)", static_cast<unsigned>(written));
+  return written > 0;
+}
+
+bool begin() {
+  if (!LittleFS.begin(true)) {
+    log_e("LittleFS non montato");
+    applyDefaults(g_config, false);
+    return false;
+  }
+
+  applyDefaults(g_config, false);
+
+  if (!LittleFS.exists(CONFIG_PATH)) {
+    log_w("Nessuna configurazione salvata: uso i default");
+    save();
+    return true;
+  }
+
+  File file = LittleFS.open(CONFIG_PATH, "r");
+  if (!file) {
+    log_e("Impossibile leggere %s", CONFIG_PATH);
+    return false;
+  }
+  JsonDocument doc(&SpiRamAllocator::instance());
+  const DeserializationError error = deserializeJson(doc, file);
+  file.close();
+  if (error) {
+    log_e("Configurazione non valida (%s): uso i default", error.c_str());
+    return false;
+  }
+
+  String message;
+  if (!applyJson(doc.as<JsonObjectConst>(), message)) {
+    log_e("Configurazione rifiutata: %s", message.c_str());
+    return false;
+  }
+  g_config.revision = 1;
+  log_i("Configurazione caricata: %u schede", static_cast<unsigned>(g_config.boards.size()));
+  return true;
+}
+
+}  // namespace cfg
