@@ -28,6 +28,7 @@ bool g_mdnsStarted = false;
 bool g_ntpConfigured = false;
 uint32_t g_bootAt = 0;
 uint32_t g_nextWifiRetryAt = 0;
+uint32_t g_apStopAt = 0;  // spegnimento ritardato dell'hotspot dopo il provisioning
 String g_apSsid;
 
 IPAddress parseIp(const String &value) {
@@ -122,6 +123,7 @@ void startWifiStation() {
 
 void begin() {
   g_bootAt = millis();
+  g_nextWifiRetryAt = g_bootAt + 30000;  // lascia tempo al primo tentativo di connessione
   WiFi.onEvent(onNetworkEvent);
   WiFi.persistent(false);
   WiFi.setAutoReconnect(true);
@@ -162,9 +164,16 @@ void loop() {
     startAccessPoint();
   }
 
-  // Hotspot attivo ma la rete è tornata: lo chiude per non tenere acceso il WiFi.
+  // Hotspot attivo ma la rete è tornata: lo chiude dopo una pausa, così chi ha appena
+  // configurato il WiFi dal telefono fa in tempo a leggere l'esito.
   if (g_apActive && (g_ethConnected || g_wifiConnected)) {
-    stopAccessPoint();
+    if (g_apStopAt == 0) {
+      g_apStopAt = now + 20000;
+    } else if (static_cast<int32_t>(now - g_apStopAt) > 0) {
+      stopAccessPoint();
+    }
+  } else if (!g_apActive) {
+    g_apStopAt = 0;
   }
 
   if (!g_wifiConnected && network.wifiSsid.length() && !g_apActive &&
