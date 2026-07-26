@@ -1,5 +1,8 @@
 # Sheltr ESP
 
+[![Build firmware](https://github.com/filippobenozzi/sheltr-esp/actions/workflows/build.yml/badge.svg)](https://github.com/filippobenozzi/sheltr-esp/actions/workflows/build.yml)
+[![Licenza MIT](https://img.shields.io/badge/licenza-MIT-black)](LICENSE)
+
 > ⚡ **Flash dal browser**: <https://filippobenozzi.github.io/sheltr-esp/>
 > 📖 **Documentazione**: cartella [`docs/`](docs/)
 
