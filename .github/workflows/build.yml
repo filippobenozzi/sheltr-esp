@@ -76,6 +76,9 @@ jobs:
     needs: build
     runs-on: ubuntu-latest
     permissions:
+      # `contents: read` va ripetuto: dichiarare i permessi nel job sostituisce
+      # quelli globali, e senza di esso actions/checkout non può leggere il repo.
+      contents: read
       pages: write
       id-token: write
     environment:
@@ -106,6 +109,9 @@ jobs:
           ls -R _site | head -50
 
       - uses: actions/configure-pages@v5
+        with:
+          # Abilita GitHub Pages sul repository se non è ancora configurato.
+          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
