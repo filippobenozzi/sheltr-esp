@@ -108,10 +108,9 @@ jobs:
           echo "${VERSION}" > _site/firmware/VERSION
           ls -R _site | head -50
 
+      # Richiede GitHub Pages già attivo sul repository con sorgente "GitHub Actions"
+      # (Settings -> Pages): il GITHUB_TOKEN del workflow non può abilitarlo da solo.
       - uses: actions/configure-pages@v5
-        with:
-          # Abilita GitHub Pages sul repository se non è ancora configurato.
-          enablement: true
       - uses: actions/upload-pages-artifact@v3
         with:
           path: _site
