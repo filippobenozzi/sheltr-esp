@@ -418,9 +418,17 @@ void handleRawFrame() {
 
 void handleGetConfig() {
   if (!requireAuth()) return;
+
+  // `?secrets=1` esporta anche le password: serve per un backup davvero ripristinabile,
+  // quindi è consentito solo con la sezione Sistema sbloccata.
+  const bool wantSecrets = g_server.hasArg("secrets") && g_server.arg("secrets") != "0";
+  if (wantSecrets && !requireSystem()) return;
+
   JsonDocument doc(&SpiRamAllocator::instance());
   JsonObject root = doc.to<JsonObject>();
-  cfg::toJson(root, false);
+  cfg::toJson(root, wantSecrets);
+  root["exportedAt"] = devices::isoTimestamp();
+  root["firmware"] = SHELTR_FW_VERSION;
 
   g_server.sendHeader("Cache-Control", "no-store");
   g_server.setContentLength(CONTENT_LENGTH_UNKNOWN);

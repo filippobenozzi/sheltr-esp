@@ -204,7 +204,7 @@
     </section>
 
     <section class="panel">
-      <h2>Schede protocollo 1.6</h2>
+      <h2>Schede</h2>
       <div id="boards"></div>
       <button id="btn-add-board">+ Aggiungi scheda</button>
     </section>
@@ -363,6 +363,18 @@
           <button id="btn-ota">Aggiorna</button>
           <span class="muted" id="ota-status"></span>
         </div>
+      </section>
+
+      <section class="panel">
+        <h2>Backup configurazione</h2>
+        <p class="muted">Esporta l'intera configurazione (schede, canali, stanze, sequenze, MQTT, rete) in un file JSON, o ripristinala da un backup.</p>
+        <div class="switch"><input id="export-secrets" type="checkbox" /><label for="export-secrets">Includi le password nel file esportato</label></div>
+        <div class="row" style="margin-top:0.5rem">
+          <button id="btn-export">Esporta JSON</button>
+          <input id="import-file" type="file" accept=".json,application/json" />
+          <button id="btn-import">Importa JSON</button>
+        </div>
+        <p class="muted" id="import-status"></p>
       </section>
 
       <section class="panel">
@@ -1664,6 +1676,58 @@
       } catch (error) {
         $("ota-status").textContent = "";
         toast(error.message, true);
+      }
+    });
+
+    $("btn-export").addEventListener("click", async () => {
+      $("btn-export").disabled = true;
+      try {
+        const secrets = $("export-secrets").checked;
+        const data = await api("/api/config" + (secrets ? "?secrets=1" : ""));
+        const blob = new Blob([JSON.stringify(data, null, 2)], { type: "application/json" });
+        const stamp = new Date().toISOString().slice(0, 10);
+        const host = (state.config && state.config.network.hostname) || "sheltr";
+        const link = document.createElement("a");
+        link.href = URL.createObjectURL(blob);
+        link.download = "sheltr-" + host + "-" + stamp + ".json";
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        setTimeout(() => URL.revokeObjectURL(link.href), 2000);
+        toast(secrets ? "Configurazione esportata (password incluse)" : "Configurazione esportata");
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        $("btn-export").disabled = false;
+      }
+    });
+
+    $("btn-import").addEventListener("click", async () => {
+      const input = $("import-file");
+      if (!input.files || !input.files[0]) { toast("Seleziona un file JSON", true); return; }
+      if (!confirm("Sostituire la configurazione attuale con quella del file?")) return;
+      $("btn-import").disabled = true;
+      $("import-status").textContent = "Lettura del file…";
+      try {
+        const text = await input.files[0].text();
+        const payload = JSON.parse(text);
+        if (!payload || typeof payload !== "object" || Array.isArray(payload)) {
+          throw new Error("Il file non contiene una configurazione valida");
+        }
+        delete payload.revision;
+        delete payload.exportedAt;
+        const data = await api("/api/config", { method: "PUT", body: payload });
+        $("import-status").textContent = "Importata (revisione " + data.revision + ")";
+        toast(data.restartRequired
+          ? "Configurazione importata: riavvia per applicare le impostazioni di rete"
+          : "Configurazione importata");
+        await loadConfig();
+        await loadStatus(false);
+      } catch (error) {
+        $("import-status").textContent = "";
+        toast(error instanceof SyntaxError ? "File JSON non valido" : error.message, true);
+      } finally {
+        $("btn-import").disabled = false;
       }
     });
 

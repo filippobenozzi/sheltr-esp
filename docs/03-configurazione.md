@@ -205,9 +205,23 @@ inviando un valore nuovo.
 
 ## Backup e ripristino
 
+Da *Sistema → Backup configurazione*:
+
+- **Esporta JSON** scarica l'intera configurazione (schede, canali, stanze, preferiti, profili orari,
+  sequenze, MQTT, cloud, rete, bus) in un file `sheltr-<hostname>-<data>.json`. La spunta
+  **«Includi le password»** decide se scriverle in chiaro nel file: senza spunta vengono esportate come
+  `********` e, in fase di ripristino, quelle già presenti sul dispositivo restano invariate.
+- **Importa JSON** carica un file e lo applica subito. L'UUID del dispositivo non viene sovrascritto,
+  quindi lo stesso backup si può usare anche su una scheda diversa.
+
+Da riga di comando:
+
 ```bash
 # backup (le password sono oscurate)
 curl http://sheltr.local/api/config > sheltr-config.json
+
+# backup completo (richiede la sezione Sistema sbloccata)
+curl -H "X-Sheltr-System: $TOKEN" 'http://sheltr.local/api/config?secrets=1' > sheltr-config.json
 
 # ripristino
 curl -X PUT http://sheltr.local/api/config \

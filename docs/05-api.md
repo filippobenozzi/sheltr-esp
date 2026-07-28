@@ -98,7 +98,7 @@ In caso di scheda muta la risposta è `502` con `{"ok": false, "error": "Nessuna
 
 | Rotta | Metodo | Descrizione |
 |---|---|---|
-| `/api/config` | GET | configurazione completa (password oscurate) |
+| `/api/config` | GET | configurazione completa (password oscurate); con `?secrets=1` include le password ma richiede il token di sistema |
 | `/api/config` | PUT / POST | applica e salva; accetta anche documenti parziali |
 | `/api/rooms/color` | PUT / POST | `{"room":"Cucina","color":"#d4e5f7"}` |
 
