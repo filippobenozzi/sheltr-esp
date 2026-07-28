@@ -28,6 +28,7 @@ sheltr/luci-piano-terra/ch1/attributes          {"board_id","address","channel",
 sheltr/luci-piano-terra/poll/set                POLL → interroga la scheda
 sheltr/poll_all/set                             POLL → interroga tutte le schede
 sheltr/service/restart/set                      RESTART → riavvia il gateway
+sheltr/sequence/<id>/set                        RUN → esegue una sequenza del sequencer
 ```
 
 Per tipo di scheda:
@@ -48,6 +49,7 @@ Per tipo di scheda:
 | `shutter` | `cover.*` | su / giù / stop (stato assunto) |
 | `thermostat` | `climate.*` | setpoint 5–30 °C passo 0,5, inverno = heat, estate = cool, temperatura ambiente e stato del relè |
 | ogni scheda | `button.*` Polling | forza una lettura `0x40` |
+| ogni sequenza | `button.*` con il nome della scena | esegue la sequenza (`<base>/sequence/<id>/set` ← `RUN`) |
 | gateway | `button.*` Polling tutte le schede, Riavvia gateway | manutenzione |
 
 Ogni scheda diventa un **dispositivo** Home Assistant collegato al gateway (`via_device`), con nome,

@@ -56,6 +56,19 @@ curl -X POST http://sheltr.local/api/frame -H 'Content-Type: application/json' \
 Se `responseHex` è vuoto il problema è fisico o di indirizzo; se arriva una risposta ma i comandi
 falliscono, controlla tipo di scheda e numero di canale.
 
+### «Salvataggio configurazione fallito» / le impostazioni spariscono al riavvio
+
+Vuol dire che il filesystem non è montato: in *Sistema → Stato* la voce **Filesystem** riporta
+`NON montato`. Succedeva con i firmware precedenti alla 0.2.0, che cercavano la partizione dati con
+l'etichetta sbagliata. Aggiorna il firmware; se il problema resta, riflasha `sheltr-esp-merged.bin` da
+seriale (riscrive anche la tabella delle partizioni) oppure esegui un `erase_flash` prima del flash.
+
+### Non riesco ad aprire la sezione Sistema
+
+È protetta dalla password dedicata (di fabbrica `Algo1962`). Se l'hai cambiata e non la ricordi, l'unica
+via è il ripristino: riflasha il firmware ed esegui `erase_flash` per cancellare la configurazione
+salvata.
+
 ### Lo stato nell'interfaccia non cambia
 
 - Il polling ciclico è a 60 s: premi **Aggiorna** per forzarlo.

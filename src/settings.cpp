@@ -24,6 +24,7 @@ namespace {
 
 constexpr const char *CONFIG_PATH = "/config.json";
 Config g_config;
+bool g_fsMounted = false;
 
 int toInt(JsonVariantConst value, int fallback) {
   if (value.is<int>() || value.is<float>()) return value.as<int>();
@@ -102,46 +103,26 @@ void daysToJson(uint8_t mask, JsonArray out) {
   }
 }
 
-String defaultDeviceId() {
-  const uint64_t mac = ESP.getEfuseMac();
-  char buffer[24];
-  snprintf(buffer, sizeof(buffer), "sheltr-%02x%02x%02x", static_cast<uint8_t>(mac >> 24),
-           static_cast<uint8_t>(mac >> 32), static_cast<uint8_t>(mac >> 40));
-  return String(buffer);
-}
-
 void applyDefaults(Config &target, bool keepNetwork) {
   NetworkCfg network = target.network;
+  const String deviceId = target.device.id;  // l'UUID sopravvive al ripristino
   target = Config();
-  target.device.id = defaultDeviceId();
+  target.device.id = deviceId.length() ? deviceId : newUuid();
   target.device.name = "Sheltr ESP";
   target.bus.tx = SHELTR_BUS_TX_DEFAULT;
   target.bus.rx = SHELTR_BUS_RX_DEFAULT;
   target.bus.de = SHELTR_BUS_DE_DEFAULT;
-  target.cloud.instanceId = target.device.id;
+  target.cloud.instanceId = "sheltr-esp";
   target.cloud.instanceName = target.device.name;
-  target.mqtt.clientId = target.device.id;
+  target.mqtt.clientId = String("sheltr-") + target.device.id.substring(0, 8);
   if (keepNetwork) {
     target.network = network;
   } else {
     target.network.hostname = "sheltr";
   }
-
-  Board board;
-  board.id = "board-1";
-  board.name = "Scheda Luci";
-  board.kind = "light";
-  board.address = 1;
-  board.channelStart = 1;
-  board.channelEnd = 8;
-  for (uint8_t channel = 1; channel <= 8; channel++) {
-    Channel item;
-    item.channel = channel;
-    item.name = defaultChannelName(board.kind, channel);
-    item.room = "Senza stanza";
-    board.channels.push_back(item);
-  }
-  target.boards.push_back(board);
+  // Nessuna scheda predefinita: l'impianto si configura dall'interfaccia.
+  target.boards.clear();
+  target.sequences.clear();
 }
 
 void parseProfile(JsonVariantConst raw, const String &kind, Profile &profile) {
@@ -238,6 +219,7 @@ void parseBoards(JsonArrayConst input, std::vector<Board> &boards) {
       if (found != saved.end()) {
         channel.name = toText(found->second["name"], defaultChannelName(board.kind, number));
         channel.room = toText(found->second["room"], "Senza stanza");
+        channel.favorite = toBool(found->second["favorite"], false);
         parseProfile(found->second["profile"], board.kind, channel.profile);
       } else {
         channel.name = defaultChannelName(board.kind, number);
@@ -250,9 +232,68 @@ void parseBoards(JsonArrayConst input, std::vector<Board> &boards) {
   }
 }
 
+void parseSequences(JsonArrayConst input, std::vector<Sequence> &sequences) {
+  sequences.clear();
+  if (input.isNull()) return;
+  size_t index = 0;
+  for (JsonVariantConst raw : input) {
+    if (!raw.is<JsonObjectConst>()) continue;
+    JsonObjectConst item = raw.as<JsonObjectConst>();
+    index++;
+    Sequence sequence;
+    sequence.id = slugify(toText(item["id"], ""), String("seq-") + index);
+    sequence.name = toText(item["name"], sequence.id);
+    sequence.room = toText(item["room"], "Senza stanza");
+    sequence.favorite = toBool(item["favorite"], false);
+
+    JsonArrayConst steps = item["steps"].as<JsonArrayConst>();
+    if (!steps.isNull()) {
+      for (JsonVariantConst stepRaw : steps) {
+        if (!stepRaw.is<JsonObjectConst>()) continue;
+        JsonObjectConst stepItem = stepRaw.as<JsonObjectConst>();
+        SequenceStep step;
+        step.channelId = toText(stepItem["channelId"], "");
+        step.action = toText(stepItem["action"], "");
+        step.action.toLowerCase();
+        if (stepItem["value"].is<float>() || stepItem["value"].is<int>()) {
+          step.value = toFloat(stepItem["value"], 0.0f);
+          step.hasValue = true;
+        }
+        String mode = toText(stepItem["mode"], "");
+        mode.toLowerCase();
+        if (mode == "summer" || mode == "winter") step.mode = mode;
+        step.delaySec = constrain(toInt(stepItem["delaySec"], 0), 0, 3600);
+        if (!step.channelId.length() && !step.delaySec) continue;
+        sequence.steps.push_back(step);
+        if (sequence.steps.size() >= 32) break;
+      }
+    }
+    sequences.push_back(sequence);
+    if (sequences.size() >= 16) break;
+  }
+}
+
+void sequenceToJson(const Sequence &sequence, JsonObject out) {
+  out["id"] = sequence.id;
+  out["name"] = sequence.name;
+  out["room"] = sequence.room;
+  out["favorite"] = sequence.favorite;
+  JsonArray steps = out["steps"].to<JsonArray>();
+  for (const SequenceStep &step : sequence.steps) {
+    JsonObject item = steps.add<JsonObject>();
+    item["channelId"] = step.channelId;
+    item["action"] = step.action;
+    if (step.hasValue) item["value"] = step.value;
+    if (step.mode.length()) item["mode"] = step.mode;
+    item["delaySec"] = step.delaySec;
+  }
+}
+
 }  // namespace
 
 Config &config() { return g_config; }
+
+bool filesystemMounted() { return g_fsMounted; }
 
 String cleanText(const String &value, const String &fallback) {
   String text = value;
@@ -333,6 +374,30 @@ Board *findBoardByAddress(uint8_t address) {
   return nullptr;
 }
 
+Sequence *findSequence(const String &sequenceId) {
+  for (Sequence &sequence : g_config.sequences) {
+    if (sequence.id == sequenceId) return &sequence;
+  }
+  return nullptr;
+}
+
+String newUuid() {
+  // UUID v4 costruito su esp_random() (alimentato dall'hardware RNG).
+  uint8_t bytes[16];
+  for (size_t i = 0; i < sizeof(bytes); i += 4) {
+    const uint32_t value = esp_random();
+    memcpy(bytes + i, &value, 4);
+  }
+  bytes[6] = (bytes[6] & 0x0F) | 0x40;  // versione 4
+  bytes[8] = (bytes[8] & 0x3F) | 0x80;  // variante RFC 4122
+  char buffer[37];
+  snprintf(buffer, sizeof(buffer),
+           "%02x%02x%02x%02x-%02x%02x-%02x%02x-%02x%02x-%02x%02x%02x%02x%02x%02x", bytes[0],
+           bytes[1], bytes[2], bytes[3], bytes[4], bytes[5], bytes[6], bytes[7], bytes[8], bytes[9],
+           bytes[10], bytes[11], bytes[12], bytes[13], bytes[14], bytes[15]);
+  return String(buffer);
+}
+
 Channel *findChannel(const String &id, Board **boardOut) {
   for (Board &board : g_config.boards) {
     for (Channel &channel : board.channels) {
@@ -372,7 +437,7 @@ bool applyJson(JsonObjectConst input, String &error) {
 
   if (input["device"].is<JsonObjectConst>()) {
     JsonObjectConst device = input["device"];
-    next.device.id = slugify(toText(device["id"], next.device.id), next.device.id);
+    // `device.id` è l'UUID del dispositivo: si genera al primo avvio e non si tocca.
     next.device.name = toText(device["name"], next.device.name);
   }
 
@@ -382,6 +447,10 @@ bool applyJson(JsonObjectConst input, String &error) {
     next.auth.username = toText(auth["username"], next.auth.username);
     const String password = toText(auth["password"], "");
     if (password.length() && password != "********") next.auth.password = password;
+    const String systemPassword = toText(auth["systemPassword"], "");
+    if (systemPassword.length() && systemPassword != "********") {
+      next.auth.systemPassword = systemPassword;
+    }
   }
 
   if (input["bus"].is<JsonObjectConst>()) {
@@ -484,10 +553,10 @@ bool applyJson(JsonObjectConst input, String &error) {
 
   if (input["boards"].is<JsonArrayConst>()) {
     parseBoards(input["boards"].as<JsonArrayConst>(), next.boards);
-    if (next.boards.empty()) {
-      error = F("configura almeno una scheda");
-      return false;
-    }
+  }
+
+  if (input["sequences"].is<JsonArrayConst>()) {
+    parseSequences(input["sequences"].as<JsonArrayConst>(), next.sequences);
   }
 
   next.revision = g_config.revision + 1;
@@ -507,6 +576,7 @@ void toJson(JsonObject out, bool includeSecrets) {
   auth["enabled"] = current.auth.enabled;
   auth["username"] = current.auth.username;
   auth["password"] = includeSecrets ? current.auth.password : String("********");
+  auth["systemPassword"] = includeSecrets ? current.auth.systemPassword : String("********");
 
   JsonObject bus = out["bus"].to<JsonObject>();
   bus["tx"] = current.bus.tx;
@@ -589,12 +659,22 @@ void toJson(JsonObject out, bool includeSecrets) {
       entry["channel"] = channel.channel;
       entry["name"] = channel.name;
       entry["room"] = channel.room;
+      entry["favorite"] = channel.favorite;
       profileToJson(channel.profile, board.kind, entry["profile"].to<JsonObject>());
     }
+  }
+
+  JsonArray sequences = out["sequences"].to<JsonArray>();
+  for (const Sequence &sequence : current.sequences) {
+    sequenceToJson(sequence, sequences.add<JsonObject>());
   }
 }
 
 bool save() {
+  if (!g_fsMounted) {
+    log_e("Filesystem non montato: configurazione non salvata");
+    return false;
+  }
   File file = LittleFS.open(CONFIG_PATH, "w");
   if (!file) {
     log_e("Impossibile aprire %s in scrittura", CONFIG_PATH);
@@ -610,8 +690,16 @@ bool save() {
 }
 
 bool begin() {
-  if (!LittleFS.begin(true)) {
-    log_e("LittleFS non montato");
+  // La partizione dati si chiama "littlefs" nella nostra tabella, ma LittleFS.begin()
+  // cerca di default l'etichetta "spiffs": senza il nome esplicito il mount fallisce
+  // e ogni salvataggio viene perso al riavvio.
+  g_fsMounted = LittleFS.begin(true, "/littlefs", 10, "littlefs");
+  if (!g_fsMounted) {
+    // Firmware installati con tabelle partizioni diverse (o precedenti) usano "spiffs".
+    g_fsMounted = LittleFS.begin(true, "/littlefs", 10, "spiffs");
+  }
+  if (!g_fsMounted) {
+    log_e("LittleFS non montato: la configurazione non verrà salvata");
     applyDefaults(g_config, false);
     return false;
   }

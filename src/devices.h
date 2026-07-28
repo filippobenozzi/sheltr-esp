@@ -57,6 +57,7 @@ struct Entity {
   String room;
   uint8_t address = 0;
   uint8_t channel = 0;
+  bool favorite = false;
 };
 
 struct CommandResult {

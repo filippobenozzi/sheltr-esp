@@ -35,6 +35,7 @@ Entity makeEntity(const cfg::Board &board, const cfg::Channel &channel) {
   entity.room = channel.room;
   entity.address = board.address;
   entity.channel = channel.channel;
+  entity.favorite = channel.favorite;
   return entity;
 }
 
@@ -109,6 +110,7 @@ void channelStateJson(const Entity &entity, JsonObject item) {
   item["kind"] = entity.kind;
   item["name"] = entity.name;
   item["room"] = entity.room;
+  item["favorite"] = entity.favorite;
   item["online"] = boardOnline(entity.address);
 
   if (entity.kind == "light") {
@@ -581,17 +583,18 @@ void statusJson(JsonObject out, bool refresh, const std::vector<uint8_t> *refres
 
   JsonObject roomColors = out["roomColors"].to<JsonObject>();
 
-  // Stanze
+  // Stanze: raccolte da canali e sequenze (un pulsante virtuale può stare da solo).
   std::vector<String> roomNames;
-  for (const cfg::Board &board : current.boards) {
-    for (const cfg::Channel &channel : board.channels) {
-      bool present = false;
-      for (const String &name : roomNames) {
-        if (name == channel.room) present = true;
-      }
-      if (!present) roomNames.push_back(channel.room);
+  auto addRoom = [&roomNames](const String &name) {
+    for (const String &existing : roomNames) {
+      if (existing == name) return;
     }
+    roomNames.push_back(name);
+  };
+  for (const cfg::Board &board : current.boards) {
+    for (const cfg::Channel &channel : board.channels) addRoom(channel.room);
   }
+  for (const cfg::Sequence &sequence : current.sequences) addRoom(sequence.room);
 
   JsonArray rooms = out["rooms"].to<JsonArray>();
   for (const String &roomName : roomNames) {
@@ -604,6 +607,19 @@ void statusJson(JsonObject out, bool refresh, const std::vector<uint8_t> *refres
     JsonArray dimmers = room["dimmers"].to<JsonArray>();
     JsonArray shutters = room["shutters"].to<JsonArray>();
     JsonArray thermostats = room["thermostats"].to<JsonArray>();
+    JsonArray sequences = room["sequences"].to<JsonArray>();
+
+    for (const cfg::Sequence &sequence : current.sequences) {
+      if (sequence.room != roomName) continue;
+      JsonObject item = sequences.add<JsonObject>();
+      item["id"] = sequence.id;
+      item["kind"] = "sequence";
+      item["name"] = sequence.name;
+      item["room"] = sequence.room;
+      item["favorite"] = sequence.favorite;
+      item["steps"] = static_cast<uint32_t>(sequence.steps.size());
+      item["online"] = true;
+    }
 
     for (const cfg::Board &board : current.boards) {
       for (const cfg::Channel &channel : board.channels) {

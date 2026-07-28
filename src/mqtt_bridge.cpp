@@ -7,6 +7,7 @@
 #include "json_utils.h"
 #include "net_manager.h"
 #include "protocol.h"
+#include "sequences.h"
 #include "settings.h"
 
 namespace mqtt {
@@ -175,6 +176,21 @@ void publishDiscovery() {
     }
   }
 
+  // Sequenze: un pulsante Home Assistant per ogni scena configurata.
+  for (const cfg::Sequence &sequence : current.sequences) {
+    JsonDocument doc(&SpiRamAllocator::instance());
+    const String uniqueId = String("sheltr_seq_") + cfg::slugify(sequence.id, "seq");
+    doc["name"] = sequence.name;
+    doc["unique_id"] = uniqueId;
+    doc["command_topic"] = current.mqtt.baseTopic + "/sequence/" + sequence.id + "/set";
+    doc["payload_press"] = "RUN";
+    doc["availability_topic"] = bridgeStatusTopic();
+    doc["icon"] = "mdi:play-box-multiple";
+    bridgeDeviceJson(doc["device"].to<JsonObject>());
+    publishDiscoveryPayload(prefix + "/button/" + uniqueId + "/config", doc);
+    count++;
+  }
+
   // Pulsanti di servizio del gateway
   struct BridgeButton {
     const char *suffix;
@@ -273,6 +289,14 @@ void handleLocalCommand(const String &topic, const String &payload) {
     log_w("Riavvio richiesto da MQTT");
     delay(200);
     ESP.restart();
+    return;
+  }
+  if (tail.startsWith("sequence/") && tail.endsWith("/set")) {
+    const String id = tail.substring(9, tail.length() - 4);
+    String error;
+    if (!sequences::start(id, error)) {
+      log_w("Sequenza '%s' non avviata: %s", id.c_str(), error.c_str());
+    }
     return;
   }
 
@@ -472,6 +496,7 @@ void connectLocal() {
   const String base = settings.baseTopic;
   g_local.subscribe((base + "/poll_all/set").c_str());
   g_local.subscribe((base + "/service/restart/set").c_str());
+  g_local.subscribe((base + "/sequence/+/set").c_str());
   g_local.subscribe((base + "/+/+/set").c_str());
   g_local.subscribe((base + "/+/+/+/set").c_str());
 

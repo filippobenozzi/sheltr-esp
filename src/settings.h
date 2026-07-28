@@ -31,7 +31,28 @@ struct Channel {
   uint8_t channel = 1;
   String name;
   String room = "Senza stanza";
+  bool favorite = false;
   Profile profile;
+};
+
+// Passo di una sequenza: un'azione su un canale, seguita da un'attesa.
+// `channelId` vuoto = passo di sola attesa.
+struct SequenceStep {
+  String channelId;
+  String action;          // on | off | toggle | up | down | stop | level | setpoint | mode
+  float value = 0.0f;     // livello dimmer (0-9) o setpoint (5-30)
+  bool hasValue = false;
+  String mode;            // winter | summer (termostati)
+  uint16_t delaySec = 0;  // attesa dopo l'esecuzione del passo
+};
+
+// Pulsante virtuale: esegue una serie di passi, può essere assegnato a una stanza.
+struct Sequence {
+  String id;
+  String name;
+  String room = "Senza stanza";
+  bool favorite = false;
+  std::vector<SequenceStep> steps;
 };
 
 struct Board {
@@ -45,7 +66,7 @@ struct Board {
 };
 
 struct DeviceCfg {
-  String id = "sheltr-esp";
+  String id;  // UUID generato al primo avvio, non modificabile
   String name = "Sheltr ESP";
 };
 
@@ -53,6 +74,8 @@ struct AuthCfg {
   bool enabled = false;
   String username = "admin";
   String password = "sheltr";
+  // Password della sezione Sistema (bus, rete, OTA, manutenzione): sempre richiesta.
+  String systemPassword = "Algo1962";
 };
 
 struct BusCfg {
@@ -123,6 +146,7 @@ struct Config {
   CloudCfg cloud;
   std::map<String, String> roomColors;
   std::vector<Board> boards;
+  std::vector<Sequence> sequences;
   uint32_t revision = 0;
 };
 
@@ -131,6 +155,7 @@ Config &config();
 // Filesystem + caricamento configurazione. Se il file non esiste crea i default.
 bool begin();
 bool save();
+bool filesystemMounted();
 void resetDefaults(bool keepNetwork);
 
 // Applica un documento JSON (dalla UI o da un backup) alla configurazione corrente.
@@ -150,6 +175,10 @@ void setRoomColor(const String &room, const String &color);
 Board *findBoard(const String &boardId);
 Board *findBoardByAddress(uint8_t address);
 Channel *findChannel(const String &entityId, Board **boardOut);
+Sequence *findSequence(const String &sequenceId);
 std::vector<uint8_t> allAddresses();
+
+// Identità del dispositivo: UUID generato una sola volta, non modificabile.
+String newUuid();
 
 }  // namespace cfg

@@ -18,8 +18,11 @@ Niente Raspberry, niente server: tutto il protocollo è implementato a livello f
 - **Protocollo 1.6 completo a bordo**: frame da 14 byte (`0x49 … 0x46`), relè luci `0x51`–`0x54` /
   `0x65`–`0x68`, tapparelle `0x5C`, dimmer `0x5B`, termostato `0x5A` + `0x6B`, polling stato `0x40`
   con decodifica di uscite, ingressi, livello dimmer, temperatura, setpoint e potenza.
-- **Interfaccia di controllo locale** in stile Sheltr Cloud: dispositivi raggruppati per stanza con
-  palette pastello, tile per luci / dimmer / tapparelle / termostati, aggiornamento stato dal bus.
+- **Interfaccia di controllo locale** in stile Sheltr Cloud: si apre su **preferiti e stanze**, con
+  palette pastello e tile per luci / dimmer / tapparelle / termostati; il dettaglio dei dispositivi si
+  apre entrando nella stanza.
+- **Sequencer**: pulsanti virtuali che eseguono una serie di azioni con attese intermedie, assegnabili a
+  una stanza ed esposti anche a Home Assistant.
 - **API HTTP compatibili con il portale**: le stesse rotte `/api/instances/<id>/…` usate da
   [sheltr-homeassistant](https://github.com/filippobenozzi/sheltr-homeassistant), quindi
   l'integrazione Home Assistant funziona puntando direttamente al dispositivo.
@@ -41,9 +44,13 @@ Niente Raspberry, niente server: tutto il protocollo è implementato a livello f
    - con cavo Ethernet il gateway risponde su `http://sheltr.local`;
    - senza rete si accende l'hotspot `Sheltr-XXXX` (password `sheltr1234`) e il captive portal si apre da solo.
 3. **Bus**: collega TX/RX (default `GPIO17` / `GPIO18`, 9600 8N1) alle schede Sheltr; con RS485 aggiungi un
-   transceiver e imposta il pin DE/RE.
-4. **Configura** le schede (tipo, indirizzo, canali, nomi, stanze) da *Configurazione* e salva.
+   transceiver e imposta il pin DE/RE dalla sezione *Sistema*.
+4. **Configura** le schede (tipo, indirizzo, canali, nomi, stanze) da *Configurazione* e salva. Al primo
+   avvio non c'è nessuna scheda preconfigurata.
 5. **Opzionale**: attiva MQTT per Home Assistant e/o il collegamento a Sheltr Cloud.
+
+> La sezione **Sistema** (bus, rete, aggiornamento firmware, manutenzione) è protetta da una password
+> dedicata — di fabbrica `Algo1962` — modificabile da *Sistema → Ora e sicurezza*.
 
 ## Struttura del repository
 

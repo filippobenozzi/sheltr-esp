@@ -81,6 +81,19 @@ In alternativa all'id si possono usare `address` + `channel`. Risposta tipica:
 
 In caso di scheda muta la risposta è `502` con `{"ok": false, "error": "Nessuna risposta dal bus"}`.
 
+## Preferiti e sequenze
+
+| Rotta | Metodo | Descrizione |
+|---|---|---|
+| `/api/favorites` | POST / PUT | `{"id":"board-1-c1","favorite":true}` — vale anche per gli id delle sequenze |
+| `/api/sequences` | GET | elenco sequenze con stato di esecuzione |
+| `/api/sequences/<id>/run` | POST | avvia la sequenza |
+| `/api/sequences/run` | POST | `{"id":"buonanotte"}` |
+| `/api/sequences/stop` | POST | interrompe la sequenza in corso |
+
+`GET /api/status` include `sequencer` con lo stato del runner (`running`, `id`, `step`, `runCount`,
+`lastError`) e, per ogni stanza, l'array `sequences`.
+
 ## Configurazione
 
 | Rotta | Metodo | Descrizione |
@@ -88,6 +101,8 @@ In caso di scheda muta la risposta è `502` con `{"ok": false, "error": "Nessuna
 | `/api/config` | GET | configurazione completa (password oscurate) |
 | `/api/config` | PUT / POST | applica e salva; accetta anche documenti parziali |
 | `/api/rooms/color` | PUT / POST | `{"room":"Cucina","color":"#d4e5f7"}` |
+
+`device.id` è l'UUID del dispositivo: viene restituito ma **ignorato in scrittura**.
 
 Il `PUT` accetta solo le sezioni presenti nel corpo: per cambiare il baudrate basta
 
@@ -99,15 +114,22 @@ curl -X PUT http://sheltr.local/api/config \
 
 ## Sistema
 
+Tutte queste rotte (tranne `/api/meta` e `/api/system/unlock`) richiedono il **token di sistema**,
+ottenuto con la password della sezione Sistema e da passare nell'header `X-Sheltr-System`
+(o come `?systemToken=`). Il token dura 30 minuti.
+
 | Rotta | Metodo | Descrizione |
 |---|---|---|
-| `/api/meta` | GET | identità del dispositivo, stato login (pubblica) |
-| `/api/system` | GET | rete, MQTT, bus, memoria, uptime, orologio |
+| `/api/meta` | GET | identità del dispositivo, stato login e rete (pubblica) |
+| `/api/system/unlock` | POST | `{"password":"Algo1962"}` → `{token}` |
+| `/api/system/lock` | POST | invalida il token di sistema |
+| `/api/system` | GET | rete, MQTT, bus, memoria, uptime, orologio, filesystem |
 | `/api/system/restart` | POST | riavvio |
 | `/api/system/factory-reset` | POST | `{"keepNetwork": true}` |
 | `/api/system/ota` | POST | upload multipart del firmware (`firmware=@file.bin`) |
-| `/api/wifi/scan` | GET | reti WiFi visibili |
-| `/api/wifi/connect` | POST | `{"ssid","password"}`, salva e connette |
+| `/api/frame` | POST | invio frame grezzo |
+| `/api/wifi/scan` | GET | reti WiFi visibili (libera in modalità hotspot) |
+| `/api/wifi/connect` | POST | `{"ssid","password"}` (libera in modalità hotspot) |
 
 ## Compatibilità Sheltr Cloud
 
@@ -132,7 +154,9 @@ l'ID del dispositivo; attiva il login se vuoi usare username e password.
 | Codice | Significato |
 |---|---|
 | `400` | payload non valido o parametri mancanti |
-| `401` | token assente o scaduto |
+| `401` | token assente o scaduto, oppure password errata |
+| `403` | sezione Sistema bloccata: serve il token di sistema |
 | `404` | dispositivo/rotta inesistente |
+| `409` | una sequenza è già in esecuzione |
 | `500` | salvataggio configurazione o OTA fallito |
 | `502` | la scheda non ha risposto sul bus |

@@ -12,6 +12,7 @@
 #include "mqtt_bridge.h"
 #include "net_manager.h"
 #include "schedules.h"
+#include "sequences.h"
 #include "settings.h"
 
 namespace webserver {
@@ -30,6 +31,7 @@ struct Session {
 };
 
 Session g_sessions[4];
+Session g_systemSessions[2];  // accesso alla sezione Sistema (password dedicata)
 
 // Print che spedisce la risposta a blocchi: evita di tenere in RAM l'intero JSON di stato.
 class ChunkedPrint : public Print {
@@ -74,32 +76,36 @@ String randomToken() {
   return String(buffer);
 }
 
-String issueToken() {
+String issueToken(Session *sessions, size_t count, uint32_t ttlMs) {
   const String token = randomToken();
-  const uint32_t expiresAt = millis() + 12UL * 60UL * 60UL * 1000UL;
   size_t slot = 0;
-  for (size_t i = 0; i < 4; i++) {
-    if (!g_sessions[i].token.length() ||
-        static_cast<int32_t>(millis() - g_sessions[i].expiresAt) > 0) {
+  for (size_t i = 0; i < count; i++) {
+    if (!sessions[i].token.length() ||
+        static_cast<int32_t>(millis() - sessions[i].expiresAt) > 0) {
       slot = i;
       break;
     }
-    if (g_sessions[i].expiresAt < g_sessions[slot].expiresAt) slot = i;
+    if (sessions[i].expiresAt < sessions[slot].expiresAt) slot = i;
   }
-  g_sessions[slot].token = token;
-  g_sessions[slot].expiresAt = expiresAt;
+  sessions[slot].token = token;
+  sessions[slot].expiresAt = millis() + ttlMs;
   return token;
 }
 
-bool tokenValid(const String &token) {
+bool tokenValidIn(Session *sessions, size_t count, const String &token) {
   if (!token.length()) return false;
-  for (Session &session : g_sessions) {
-    if (session.token == token && static_cast<int32_t>(millis() - session.expiresAt) < 0) {
+  for (size_t i = 0; i < count; i++) {
+    if (sessions[i].token == token &&
+        static_cast<int32_t>(millis() - sessions[i].expiresAt) < 0) {
       return true;
     }
   }
   return false;
 }
+
+String issueToken() { return issueToken(g_sessions, 4, 12UL * 60UL * 60UL * 1000UL); }
+
+bool tokenValid(const String &token) { return tokenValidIn(g_sessions, 4, token); }
 
 String requestToken() {
   if (g_server.hasHeader("Authorization")) {
@@ -151,6 +157,23 @@ bool requireAuth() {
   if (!cfg::config().auth.enabled) return true;
   if (tokenValid(requestToken())) return true;
   sendError(401, F("Autenticazione richiesta"));
+  return false;
+}
+
+String systemToken() {
+  if (g_server.hasHeader("X-Sheltr-System")) return g_server.header("X-Sheltr-System");
+  if (g_server.hasArg("systemToken")) return g_server.arg("systemToken");
+  return String();
+}
+
+bool systemUnlocked() { return tokenValidIn(g_systemSessions, 2, systemToken()); }
+
+// La sezione Sistema (bus, rete, OTA, manutenzione, frame grezzi) è sempre protetta
+// dalla password dedicata, anche quando il login generale è disattivato.
+bool requireSystem() {
+  if (!requireAuth()) return false;
+  if (systemUnlocked()) return true;
+  sendError(403, F("Sezione Sistema protetta: inserisci la password"));
   return false;
 }
 
@@ -209,6 +232,7 @@ void writeStatus(bool refresh, const std::vector<uint8_t> *addresses) {
   JsonDocument doc(&SpiRamAllocator::instance());
   JsonObject root = doc.to<JsonObject>();
   devices::statusJson(root, refresh, addresses);
+  sequences::statusJson(root["sequencer"].to<JsonObject>());
   if (refresh) mqtt::publishStates();
 
   g_server.sendHeader("Cache-Control", "no-store");
@@ -372,7 +396,7 @@ void handleThermostatCommand() {
 }
 
 void handleRawFrame() {
-  if (!requireAuth()) return;
+  if (!requireSystem()) return;
   JsonDocument body(&SpiRamAllocator::instance());
   if (!readBody(body)) return;
   const String hex = bodyString(body, "hex", bodyString(body, "payload"));
@@ -454,6 +478,102 @@ void handleRoomColor() {
   sendOk();
 }
 
+// ------------------------------------------------------ favoriti e sequenze
+
+void handleFavorite() {
+  if (!requireAuth()) return;
+  JsonDocument body(&SpiRamAllocator::instance());
+  if (!readBody(body)) return;
+  const String id = bodyString(body, "id", bodyString(body, "channelId"));
+  if (!id.length()) {
+    sendError(400, F("Specifica l'id del dispositivo o della sequenza"));
+    return;
+  }
+  const bool favorite = body["favorite"].is<bool>() ? body["favorite"].as<bool>() : true;
+
+  cfg::Board *board = nullptr;
+  cfg::Channel *channel = cfg::findChannel(id, &board);
+  if (channel != nullptr) {
+    channel->favorite = favorite;
+  } else {
+    cfg::Sequence *sequence = cfg::findSequence(id);
+    if (sequence == nullptr) {
+      sendError(404, F("Dispositivo o sequenza non trovati"));
+      return;
+    }
+    sequence->favorite = favorite;
+  }
+
+  if (!cfg::save()) {
+    sendError(500, F("Salvataggio preferito fallito"));
+    return;
+  }
+  JsonDocument doc(&SpiRamAllocator::instance());
+  doc["ok"] = true;
+  doc["id"] = id;
+  doc["favorite"] = favorite;
+  sendJson(200, doc);
+}
+
+void sequencesJson(JsonObject out) {
+  JsonArray list = out["sequences"].to<JsonArray>();
+  for (const cfg::Sequence &sequence : cfg::config().sequences) {
+    JsonObject item = list.add<JsonObject>();
+    item["id"] = sequence.id;
+    item["name"] = sequence.name;
+    item["room"] = sequence.room;
+    item["favorite"] = sequence.favorite;
+    item["steps"] = static_cast<uint32_t>(sequence.steps.size());
+    item["running"] = sequences::running() && sequences::runningId() == sequence.id;
+  }
+  sequences::statusJson(out["runner"].to<JsonObject>());
+}
+
+void handleSequences() {
+  if (!requireAuth()) return;
+  JsonDocument doc(&SpiRamAllocator::instance());
+  JsonObject root = doc.to<JsonObject>();
+  root["ok"] = true;
+  sequencesJson(root);
+  sendJson(200, doc);
+}
+
+void runSequenceById(const String &id) {
+  String error;
+  if (!sequences::start(id, error)) {
+    sendError(sequences::running() ? 409 : 404, error);
+    return;
+  }
+  JsonDocument doc(&SpiRamAllocator::instance());
+  doc["ok"] = true;
+  doc["id"] = id;
+  doc["running"] = true;
+  sendJson(200, doc);
+}
+
+void handleSequenceRunPath() {
+  if (!requireAuth()) return;
+  runSequenceById(g_server.pathArg(0));
+}
+
+void handleSequenceRun() {
+  if (!requireAuth()) return;
+  JsonDocument body(&SpiRamAllocator::instance());
+  if (!readBody(body)) return;
+  const String id = bodyString(body, "id", bodyString(body, "sequenceId"));
+  if (!id.length()) {
+    sendError(400, F("Specifica l'id della sequenza"));
+    return;
+  }
+  runSequenceById(id);
+}
+
+void handleSequenceStop() {
+  if (!requireAuth()) return;
+  sequences::stop();
+  sendOk();
+}
+
 // -------------------------------------------------------------------- sistema
 
 void systemJson(JsonObject out) {
@@ -471,6 +591,7 @@ void systemJson(JsonObject out) {
   out["time"] = devices::isoTimestamp();
   out["timeSynced"] = devices::timeSynced();
   out["authEnabled"] = current.auth.enabled;
+  out["filesystem"] = cfg::filesystemMounted() ? "montato" : "NON montato";
 
   net::statusJson(out["network"].to<JsonObject>());
   mqtt::statusJson(out["mqtt"].to<JsonObject>());
@@ -490,14 +611,44 @@ void systemJson(JsonObject out) {
   JsonObject profiles = out["schedules"].to<JsonObject>();
   profiles["appliedCount"] = schedules::appliedCount();
   profiles["lastRunAgoMs"] = schedules::lastRunAt() ? millis() - schedules::lastRunAt() : 0;
+
+  sequences::statusJson(out["sequencer"].to<JsonObject>());
 }
 
 void handleSystem() {
-  if (!requireAuth()) return;
+  if (!requireSystem()) return;
   JsonDocument doc(&SpiRamAllocator::instance());
   JsonObject root = doc.to<JsonObject>();
   systemJson(root);
   sendJson(200, doc);
+}
+
+void handleSystemUnlock() {
+  if (!requireAuth()) return;
+  JsonDocument body(&SpiRamAllocator::instance());
+  if (!readBody(body)) return;
+  const String password = bodyString(body, "password");
+  if (!password.length() || password != cfg::config().auth.systemPassword) {
+    delay(400);  // rallenta i tentativi a forza bruta
+    sendError(401, F("Password Sistema non valida"));
+    return;
+  }
+  JsonDocument doc(&SpiRamAllocator::instance());
+  doc["ok"] = true;
+  doc["token"] = issueToken(g_systemSessions, 2, 30UL * 60UL * 1000UL);
+  doc["expiresInSec"] = 1800;
+  sendJson(200, doc);
+}
+
+void handleSystemLock() {
+  const String token = systemToken();
+  for (Session &session : g_systemSessions) {
+    if (session.token == token) {
+      session.token = "";
+      session.expiresAt = 0;
+    }
+  }
+  sendOk();
 }
 
 void handleMeta() {
@@ -512,21 +663,43 @@ void handleMeta() {
   doc["protocolVersion"] = "1.6";
   doc["authRequired"] = cfg::config().auth.enabled;
   doc["authenticated"] = !cfg::config().auth.enabled || tokenValid(requestToken());
+  doc["systemUnlocked"] = systemUnlocked();
   doc["apMode"] = net::apActive();
   doc["online"] = net::online();
   doc["hostname"] = cfg::config().network.hostname + ".local";
+  doc["boardsConfigured"] = static_cast<uint32_t>(cfg::config().boards.size());
+  doc["filesystem"] = cfg::filesystemMounted();
+
+  // Riepilogo rete per l'intestazione: la pagina Sistema è protetta da password,
+  // ma l'indicatore di connessione deve restare visibile.
+  JsonObject network = doc["network"].to<JsonObject>();
+  if (net::ethConnected()) {
+    network["interface"] = "ethernet";
+    network["ip"] = net::ethIp();
+  } else if (net::wifiConnected()) {
+    network["interface"] = "wifi";
+    network["ip"] = net::wifiIp();
+    network["ssid"] = net::wifiSsid();
+  } else if (net::apActive()) {
+    network["interface"] = "hotspot";
+    network["ip"] = net::apIp();
+    network["ssid"] = net::apSsid();
+  } else {
+    network["interface"] = "offline";
+    network["ip"] = "";
+  }
   sendJson(200, doc);
 }
 
 void handleRestart() {
-  if (!requireAuth()) return;
+  if (!requireSystem()) return;
   g_restartPending = true;
   g_restartAt = millis() + 600;
   sendOk();
 }
 
 void handleFactoryReset() {
-  if (!requireAuth()) return;
+  if (!requireSystem()) return;
   JsonDocument body(&SpiRamAllocator::instance());
   if (!readBody(body)) return;
   const bool keepNetwork = body["keepNetwork"].is<bool>() ? body["keepNetwork"].as<bool>() : true;
@@ -539,8 +712,15 @@ void handleFactoryReset() {
 
 // -------------------------------------------------------------- provisioning
 
+// In modalità hotspot il provisioning WiFi resta libero: è il primo avvio e
+// l'access point è già protetto dalla propria password.
+bool requireSystemUnlessProvisioning() {
+  if (net::apActive()) return true;
+  return requireSystem();
+}
+
 void handleWifiScan() {
-  if (!requireAuth()) return;
+  if (!requireSystemUnlessProvisioning()) return;
   JsonDocument doc(&SpiRamAllocator::instance());
   JsonObject root = doc.to<JsonObject>();
   root["ok"] = true;
@@ -549,7 +729,7 @@ void handleWifiScan() {
 }
 
 void handleWifiConnect() {
-  if (!requireAuth()) return;
+  if (!requireSystemUnlessProvisioning()) return;
   JsonDocument body(&SpiRamAllocator::instance());
   if (!readBody(body)) return;
   const String ssid = bodyString(body, "ssid");
@@ -636,6 +816,11 @@ void handleOtaUpload() {
       g_otaMessage = F("Autenticazione richiesta");
       return;
     }
+    if (!systemUnlocked()) {
+      g_otaError = true;
+      g_otaMessage = F("Sezione Sistema protetta: inserisci la password");
+      return;
+    }
     log_i("OTA: avvio aggiornamento (%s)", upload.filename.c_str());
     if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
       g_otaError = true;
@@ -661,7 +846,6 @@ void handleOtaUpload() {
 }
 
 void handleOtaFinish() {
-  if (!requireAuth()) return;
   JsonDocument doc(&SpiRamAllocator::instance());
   doc["ok"] = !g_otaError;
   if (g_otaError) {
@@ -712,8 +896,8 @@ void handleInstanceAuthState() {
 }
 
 void registerRoutes() {
-  const char *headerKeys[] = {"Authorization", "Cookie", "Content-Type"};
-  g_server.collectHeaders(headerKeys, 3);
+  const char *headerKeys[] = {"Authorization", "Cookie", "Content-Type", "X-Sheltr-System"};
+  g_server.collectHeaders(headerKeys, 4);
 
   g_server.on("/", HTTP_GET, sendIndex);
   g_server.on("/control", HTTP_GET, sendIndex);
@@ -729,6 +913,8 @@ void registerRoutes() {
 
   g_server.on("/api/meta", HTTP_GET, handleMeta);
   g_server.on("/api/system", HTTP_GET, handleSystem);
+  g_server.on("/api/system/unlock", HTTP_POST, handleSystemUnlock);
+  g_server.on("/api/system/lock", HTTP_POST, handleSystemLock);
   g_server.on("/api/system/restart", HTTP_POST, handleRestart);
   g_server.on("/api/system/factory-reset", HTTP_POST, handleFactoryReset);
   g_server.on("/api/system/ota", HTTP_POST, handleOtaFinish, handleOtaUpload);
@@ -746,6 +932,13 @@ void registerRoutes() {
   g_server.on("/api/frame", HTTP_POST, handleRawFrame);
   g_server.on("/api/rooms/color", HTTP_PUT, handleRoomColor);
   g_server.on("/api/rooms/color", HTTP_POST, handleRoomColor);
+  g_server.on("/api/favorites", HTTP_POST, handleFavorite);
+  g_server.on("/api/favorites", HTTP_PUT, handleFavorite);
+
+  g_server.on("/api/sequences", HTTP_GET, handleSequences);
+  g_server.on("/api/sequences/run", HTTP_POST, handleSequenceRun);
+  g_server.on("/api/sequences/stop", HTTP_POST, handleSequenceStop);
+  g_server.on(UriBraces("/api/sequences/{}/run"), HTTP_POST, handleSequenceRunPath);
 
   g_server.on("/api/wifi/scan", HTTP_GET, handleWifiScan);
   g_server.on("/api/wifi/connect", HTTP_POST, handleWifiConnect);

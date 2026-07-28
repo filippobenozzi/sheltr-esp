@@ -6,6 +6,7 @@
 #include "mqtt_bridge.h"
 #include "net_manager.h"
 #include "schedules.h"
+#include "sequences.h"
 #include "settings.h"
 #include "web_ui.h"
 
@@ -36,5 +37,6 @@ void loop() {
   mqtt::loop();
   devices::loop();
   schedules::loop();
+  sequences::loop();
   delay(2);
 }

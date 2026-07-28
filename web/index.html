@@ -20,6 +20,7 @@
     --rose: #e11d48;
     --rose-soft: #fb7185;
     --sky: #0284c7;
+    --amber: #d97706;
     --font-sans: "IBM Plex Sans", ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
     --font-mono: "IBM Plex Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   }
@@ -34,64 +35,42 @@
     font-size: 15px;
     -webkit-font-smoothing: antialiased;
   }
-  a { color: inherit; }
   h1, h2, h3 { margin: 0; font-weight: 600; letter-spacing: -0.01em; }
 
   .shell { max-width: 80rem; margin: 0 auto; padding: 0 1rem 4rem; }
-  header.topbar {
-    position: sticky; top: 0; z-index: 20;
-    background: var(--background);
-    border-bottom: 2px solid var(--border);
-  }
-  .topbar-inner {
-    max-width: 80rem; margin: 0 auto; padding: 0.75rem 1rem;
-    display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap;
-  }
+  header.topbar { position: sticky; top: 0; z-index: 20; background: var(--background); border-bottom: 2px solid var(--border); }
+  .topbar-inner { max-width: 80rem; margin: 0 auto; padding: 0.75rem 1rem; display: flex; align-items: center; gap: 0.75rem; flex-wrap: wrap; }
   .brand { display: flex; align-items: baseline; gap: 0.5rem; min-width: 0; }
   .brand h1 { font-size: 1.05rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-  .brand span { font-size: 0.7rem; color: var(--muted-foreground); font-family: var(--font-mono); }
   .spacer { flex: 1 1 auto; }
 
-  .chip {
-    display: inline-flex; align-items: center; gap: 0.4rem;
-    border: 2px solid var(--border); padding: 0.25rem 0.5rem;
-    font-size: 0.72rem; font-family: var(--font-mono); text-transform: uppercase;
-    background: var(--background);
-  }
+  .chip { display: inline-flex; align-items: center; gap: 0.4rem; border: 2px solid var(--border); padding: 0.25rem 0.5rem; font-size: 0.72rem; font-family: var(--font-mono); text-transform: uppercase; background: var(--background); }
   .dot { width: 0.5rem; height: 0.5rem; border-radius: 999px; background: #a3a3a3; }
   .dot.on { background: var(--emerald); }
-  .dot.warn { background: #f59e0b; }
+  .dot.warn { background: var(--amber); }
   .dot.off { background: var(--rose); }
 
-  button, .btn {
-    font: inherit; font-weight: 600; cursor: pointer;
-    border: 2px solid var(--border); background: var(--background); color: var(--foreground);
-    padding: 0.4rem 0.7rem; border-radius: 0; line-height: 1.2;
-  }
+  button, .btn { font: inherit; font-weight: 600; cursor: pointer; border: 2px solid var(--border); background: var(--background); color: var(--foreground); padding: 0.4rem 0.7rem; border-radius: 0; line-height: 1.2; }
   button:hover { background: var(--muted); }
   button:disabled { opacity: 0.45; cursor: not-allowed; }
   button.primary { background: var(--primary); color: var(--primary-foreground); border-color: var(--primary); }
   button.primary:hover { background: #000; }
-  button.ghost { border-color: transparent; background: transparent; padding: 0.3rem; }
+  button.ghost { border-color: transparent; background: transparent; padding: 0.25rem; }
   button.ghost:hover { background: var(--muted); }
   button.small { font-size: 0.78rem; padding: 0.25rem 0.5rem; }
   button.danger { border-color: var(--rose); color: var(--rose); }
   button.danger:hover { background: #fff1f2; }
+  button.star { font-size: 0.95rem; line-height: 1; color: #b8b8b8; }
+  button.star.active { color: #f59e0b; }
 
-  .tabs { display: flex; gap: 0; border: 2px solid var(--border); background: var(--background); }
+  .tabs { display: flex; border: 2px solid var(--border); background: var(--background); }
   .tabs button { border: none; border-right: 2px solid var(--border); font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.08em; }
   .tabs button:last-child { border-right: none; }
   .tabs button.active { background: var(--primary); color: var(--primary-foreground); }
 
   section.panel { background: var(--background); border: 2px solid var(--border); padding: 1rem; margin-top: 1.25rem; }
-  section.panel > h2 {
-    font-size: 0.95rem; border-bottom: 2px solid var(--border);
-    padding-bottom: 0.6rem; margin-bottom: 0.9rem;
-  }
-  .section-title {
-    font-size: 0.78rem; font-weight: 600; text-transform: uppercase;
-    letter-spacing: 0.18em; color: var(--muted-foreground); margin: 1.5rem 0 0.7rem;
-  }
+  section.panel > h2 { font-size: 0.95rem; border-bottom: 2px solid var(--border); padding-bottom: 0.6rem; margin-bottom: 0.9rem; }
+  .section-title { font-size: 0.78rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.18em; color: var(--muted-foreground); margin: 1.5rem 0 0.7rem; }
 
   .grid { display: grid; gap: 0.75rem; grid-template-columns: repeat(2, minmax(0, 1fr)); }
   @media (min-width: 640px) { .grid { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
@@ -123,25 +102,26 @@
   .pulse { animation: pulse 1.6s ease-in-out infinite; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
 
-  .rooms { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
-  .room-card { border: 2px solid var(--border); padding: 0.9rem; text-align: left; display: flex; flex-direction: column; gap: 0.35rem; }
-  .room-card strong { font-size: 0.95rem; }
-  .room-card small { font-size: 0.72rem; color: #3f3f3f; }
+  .rooms { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); }
+  .room-card { border: 2px solid var(--border); padding: 1rem; text-align: left; display: flex; flex-direction: column; gap: 0.35rem; min-height: 6rem; }
+  .room-card strong { font-size: 1rem; }
+  .room-card small { font-size: 0.75rem; color: #3f3f3f; }
 
   label { display: block; font-size: 0.75rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; color: var(--muted-foreground); margin-bottom: 0.25rem; }
   input[type="text"], input[type="password"], input[type="number"], input[type="time"], select, textarea {
     width: 100%; font: inherit; padding: 0.4rem 0.5rem; border: 2px solid var(--border);
     background: var(--background); color: var(--foreground); border-radius: 0;
   }
+  input:disabled { background: var(--muted); color: var(--muted-foreground); }
   input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); outline-offset: -2px; }
   .field { margin-bottom: 0.75rem; }
   .fields { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr)); }
-  .switch { display: flex; align-items: center; gap: 0.5rem; }
+  .switch { display: flex; align-items: center; gap: 0.5rem; margin-bottom: 0.4rem; }
   .switch input { width: 1.1rem; height: 1.1rem; accent-color: var(--primary); }
   .switch label { margin: 0; text-transform: none; letter-spacing: 0; font-size: 0.85rem; color: var(--foreground); }
 
   table { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
-  th, td { border: 1px solid var(--border); padding: 0.35rem 0.4rem; text-align: left; }
+  th, td { border: 1px solid var(--border); padding: 0.35rem 0.4rem; text-align: left; vertical-align: middle; }
   th { background: var(--muted); font-size: 0.7rem; text-transform: uppercase; letter-spacing: 0.06em; }
   td input, td select { padding: 0.25rem 0.35rem; border-width: 1px; }
 
@@ -153,19 +133,11 @@
   .kv dt { color: var(--muted-foreground); }
   .kv dd { margin: 0; font-family: var(--font-mono); overflow-wrap: anywhere; }
 
-  .toast {
-    position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%);
-    background: var(--primary); color: var(--primary-foreground);
-    border: 2px solid var(--primary); padding: 0.55rem 0.9rem; font-size: 0.85rem;
-    max-width: min(92vw, 30rem); z-index: 60; display: none;
-  }
+  .toast { position: fixed; left: 50%; bottom: 1.25rem; transform: translateX(-50%); background: var(--primary); color: var(--primary-foreground); border: 2px solid var(--primary); padding: 0.55rem 0.9rem; font-size: 0.85rem; max-width: min(92vw, 30rem); z-index: 60; display: none; }
   .toast.error { background: var(--rose); border-color: var(--rose); }
   .toast.show { display: block; }
 
-  dialog {
-    border: 2px solid var(--border); padding: 0; background: var(--background); color: var(--foreground);
-    width: min(94vw, 34rem); max-height: 88vh;
-  }
+  dialog { border: 2px solid var(--border); padding: 0; background: var(--background); color: var(--foreground); width: min(94vw, 38rem); max-height: 88vh; }
   dialog::backdrop { background: rgba(0, 0, 0, 0.45); }
   .dialog-body { padding: 1rem; overflow-y: auto; max-height: calc(88vh - 4rem); }
   .dialog-head { display: flex; justify-content: space-between; align-items: center; border-bottom: 2px solid var(--border); padding: 0.75rem 1rem; }
@@ -176,8 +148,10 @@
 
   .center-card { max-width: 26rem; margin: 3rem auto; }
   .hidden { display: none !important; }
-  .offline-overlay { opacity: 0.45; pointer-events: none; }
-  .banner { border: 2px solid #f59e0b; background: #fffbeb; padding: 0.6rem 0.75rem; font-size: 0.85rem; margin-top: 1rem; }
+  .banner { border: 2px solid var(--amber); background: #fffbeb; padding: 0.6rem 0.75rem; font-size: 0.85rem; margin-top: 1rem; }
+  .empty { border: 2px dashed var(--border); padding: 1.5rem; text-align: center; color: var(--muted-foreground); margin-top: 1rem; }
+  .crumb { display: flex; align-items: center; gap: 0.6rem; margin-top: 1rem; }
+  .crumb h2 { font-size: 1.1rem; }
 </style>
 </head>
 <body>
@@ -185,7 +159,6 @@
   <div class="topbar-inner">
     <div class="brand">
       <h1 id="device-name">Sheltr ESP</h1>
-      <span id="device-id"></span>
     </div>
     <span class="chip" id="net-chip"><span class="dot" id="net-dot"></span><span id="net-text">…</span></span>
     <span class="spacer"></span>
@@ -213,7 +186,6 @@
   <!-- ---------------------------------------------------------- controllo -->
   <div id="view-control">
     <div id="control-banner"></div>
-    <div id="rooms-nav" class="row" style="margin-top:1rem"></div>
     <div id="control-body"></div>
   </div>
 
@@ -223,10 +195,12 @@
       <h2>Dispositivo</h2>
       <div class="fields">
         <div class="field"><label for="cfg-name">Nome impianto</label><input id="cfg-name" type="text" /></div>
-        <div class="field"><label for="cfg-id">ID dispositivo</label><input id="cfg-id" type="text" /></div>
-        <div class="field"><label for="cfg-hostname">Hostname (dominio locale)</label><input id="cfg-hostname" type="text" placeholder="sheltr" /></div>
+        <div class="field">
+          <label for="cfg-id">ID dispositivo (UUID)</label>
+          <input id="cfg-id" type="text" class="mono" disabled />
+        </div>
       </div>
-      <p class="muted">Il dispositivo risponde su <span class="mono" id="cfg-mdns">http://sheltr.local</span></p>
+      <p class="muted">L'identificativo è generato al primo avvio, è univoco per questa scheda e non può essere modificato.</p>
     </section>
 
     <section class="panel">
@@ -236,16 +210,10 @@
     </section>
 
     <section class="panel">
-      <h2>Bus seriale</h2>
-      <div class="fields">
-        <div class="field"><label for="cfg-bus-tx">GPIO TX</label><input id="cfg-bus-tx" type="number" min="-1" max="48" /></div>
-        <div class="field"><label for="cfg-bus-rx">GPIO RX</label><input id="cfg-bus-rx" type="number" min="-1" max="48" /></div>
-        <div class="field"><label for="cfg-bus-de">GPIO DE/RE (RS485, -1 se TTL)</label><input id="cfg-bus-de" type="number" min="-1" max="48" /></div>
-        <div class="field"><label for="cfg-bus-baud">Baudrate</label><input id="cfg-bus-baud" type="number" min="1200" max="115200" /></div>
-        <div class="field"><label for="cfg-bus-timeout">Timeout risposta (ms)</label><input id="cfg-bus-timeout" type="number" min="100" max="8000" /></div>
-        <div class="field"><label for="cfg-bus-retries">Tentativi extra</label><input id="cfg-bus-retries" type="number" min="0" max="5" /></div>
-        <div class="field"><label for="cfg-bus-poll">Polling automatico (s, 0 = off)</label><input id="cfg-bus-poll" type="number" min="0" max="3600" /></div>
-      </div>
+      <h2>Sequencer</h2>
+      <p class="muted">Un pulsante virtuale che esegue una serie di azioni in ordine. Ogni passo può attendere un tempo prima di passare al successivo.</p>
+      <div id="sequences"></div>
+      <button id="btn-add-sequence">+ Nuova sequenza</button>
     </section>
 
     <section class="panel">
@@ -255,7 +223,7 @@
         <div class="field"><label for="cfg-mqtt-host">Broker</label><input id="cfg-mqtt-host" type="text" placeholder="192.168.1.10" /></div>
         <div class="field"><label for="cfg-mqtt-port">Porta</label><input id="cfg-mqtt-port" type="number" min="1" max="65535" /></div>
         <div class="field"><label for="cfg-mqtt-user">Utente</label><input id="cfg-mqtt-user" type="text" autocomplete="off" /></div>
-        <div class="field"><label for="cfg-mqtt-pass">Password</label><input id="cfg-mqtt-pass" type="password" autocomplete="new-password" /></div>
+        <div class="field"><label for="cfg-mqtt-pass">Password</label><input id="cfg-mqtt-pass" type="password" autocomplete="new-password" placeholder="invariata" /></div>
         <div class="field"><label for="cfg-mqtt-base">Base topic</label><input id="cfg-mqtt-base" type="text" placeholder="sheltr" /></div>
         <div class="field"><label for="cfg-mqtt-prefix">Prefisso discovery</label><input id="cfg-mqtt-prefix" type="text" placeholder="homeassistant" /></div>
         <div class="field"><label for="cfg-mqtt-interval">Intervallo stati (s)</label><input id="cfg-mqtt-interval" type="number" min="5" max="3600" /></div>
@@ -270,7 +238,7 @@
         <div class="field"><label for="cfg-cloud-host">Broker cloud</label><input id="cfg-cloud-host" type="text" /></div>
         <div class="field"><label for="cfg-cloud-port">Porta</label><input id="cfg-cloud-port" type="number" min="1" max="65535" /></div>
         <div class="field"><label for="cfg-cloud-user">Utente</label><input id="cfg-cloud-user" type="text" autocomplete="off" /></div>
-        <div class="field"><label for="cfg-cloud-pass">Password</label><input id="cfg-cloud-pass" type="password" autocomplete="new-password" /></div>
+        <div class="field"><label for="cfg-cloud-pass">Password</label><input id="cfg-cloud-pass" type="password" autocomplete="new-password" placeholder="invariata" /></div>
         <div class="field"><label for="cfg-cloud-instance">ID istanza</label><input id="cfg-cloud-instance" type="text" /></div>
         <div class="field"><label for="cfg-cloud-instance-name">Nome istanza</label><input id="cfg-cloud-instance-name" type="text" /></div>
         <div class="field"><label for="cfg-cloud-format">Formato payload</label>
@@ -285,51 +253,6 @@
       <p class="muted">Topic usati: <span class="mono" id="cfg-cloud-topics"></span></p>
     </section>
 
-    <section class="panel">
-      <h2>Rete</h2>
-      <div class="switch"><input id="cfg-eth-enabled" type="checkbox" /><label for="cfg-eth-enabled">Ethernet W5500 attiva</label></div>
-      <div class="switch"><input id="cfg-dhcp" type="checkbox" /><label for="cfg-dhcp">Indirizzo automatico (DHCP)</label></div>
-      <div class="fields" id="static-fields" style="margin-top:0.75rem">
-        <div class="field"><label for="cfg-ip">IP statico</label><input id="cfg-ip" type="text" placeholder="192.168.1.50" /></div>
-        <div class="field"><label for="cfg-gateway">Gateway</label><input id="cfg-gateway" type="text" /></div>
-        <div class="field"><label for="cfg-subnet">Netmask</label><input id="cfg-subnet" type="text" placeholder="255.255.255.0" /></div>
-        <div class="field"><label for="cfg-dns1">DNS primario</label><input id="cfg-dns1" type="text" /></div>
-      </div>
-      <h3 style="margin-top:1rem;font-size:0.85rem">WiFi</h3>
-      <div class="fields">
-        <div class="field"><label for="cfg-wifi-ssid">Rete WiFi</label>
-          <div class="row">
-            <input id="cfg-wifi-ssid" type="text" list="wifi-list" style="flex:1" />
-            <button id="btn-scan" class="small">Cerca</button>
-          </div>
-          <datalist id="wifi-list"></datalist>
-        </div>
-        <div class="field"><label for="cfg-wifi-pass">Password WiFi</label><input id="cfg-wifi-pass" type="password" autocomplete="new-password" /></div>
-      </div>
-      <button id="btn-wifi-connect">Connetti ora</button>
-      <h3 style="margin-top:1rem;font-size:0.85rem">Hotspot di configurazione</h3>
-      <div class="fields">
-        <div class="field"><label for="cfg-ap-ssid">SSID hotspot</label><input id="cfg-ap-ssid" type="text" placeholder="Sheltr-XXXX" /></div>
-        <div class="field"><label for="cfg-ap-pass">Password hotspot (min 8)</label><input id="cfg-ap-pass" type="password" autocomplete="new-password" /></div>
-      </div>
-      <div class="switch"><input id="cfg-ap-fallback" type="checkbox" /><label for="cfg-ap-fallback">Apri l'hotspot se non c'è connettività</label></div>
-    </section>
-
-    <section class="panel">
-      <h2>Ora e sicurezza</h2>
-      <div class="fields">
-        <div class="field"><label for="cfg-ntp-server">Server NTP</label><input id="cfg-ntp-server" type="text" /></div>
-        <div class="field"><label for="cfg-ntp-tz">Fuso orario (POSIX TZ)</label><input id="cfg-ntp-tz" type="text" /></div>
-      </div>
-      <div class="switch"><input id="cfg-ntp-enabled" type="checkbox" /><label for="cfg-ntp-enabled">Sincronizza l'orologio via NTP (serve per i profili orari)</label></div>
-      <hr style="border:none;border-top:2px solid var(--border);margin:1rem 0" />
-      <div class="switch"><input id="cfg-auth-enabled" type="checkbox" /><label for="cfg-auth-enabled">Richiedi login per interfaccia e API</label></div>
-      <div class="fields" style="margin-top:0.75rem">
-        <div class="field"><label for="cfg-auth-user">Utente</label><input id="cfg-auth-user" type="text" autocomplete="off" /></div>
-        <div class="field"><label for="cfg-auth-pass">Password</label><input id="cfg-auth-pass" type="password" autocomplete="new-password" /></div>
-      </div>
-    </section>
-
     <div class="row" style="margin-top:1.25rem">
       <button class="primary" id="btn-save">Salva configurazione</button>
       <button id="btn-reload-config">Ricarica</button>
@@ -339,40 +262,122 @@
 
   <!-- --------------------------------------------------------------- sistema -->
   <div id="view-system" class="hidden">
-    <section class="panel">
-      <h2>Stato del sistema</h2>
-      <dl class="kv" id="system-kv"></dl>
-    </section>
-    <section class="panel">
-      <h2>Bus e schede</h2>
-      <dl class="kv" id="bus-kv"></dl>
-      <table id="boards-status" style="margin-top:0.75rem"></table>
-    </section>
-    <section class="panel">
-      <h2>Diagnostica protocollo</h2>
-      <p class="muted">Invia un frame grezzo di 14 byte (esadecimale) e leggi la risposta della scheda.</p>
-      <div class="row">
-        <input id="frame-hex" type="text" class="mono" placeholder="49 01 40 00 00 00 00 00 00 00 00 00 00 46" style="flex:1;min-width:16rem" />
-        <button id="btn-frame">Invia</button>
+    <div id="system-lock">
+      <section class="panel center-card">
+        <h2>Sezione protetta</h2>
+        <p class="muted">La sezione Sistema contiene bus, rete, aggiornamento firmware e manutenzione. Inserisci la password per accedere.</p>
+        <div class="field"><label for="system-pass">Password Sistema</label><input id="system-pass" type="password" autocomplete="off" /></div>
+        <button class="primary" id="btn-system-unlock">Sblocca</button>
+      </section>
+    </div>
+
+    <div id="system-content" class="hidden">
+      <section class="panel">
+        <h2>Stato del sistema</h2>
+        <dl class="kv" id="system-kv"></dl>
+        <div class="row" style="margin-top:0.75rem">
+          <button id="btn-system-lock" class="small">Blocca sezione</button>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Bus seriale</h2>
+        <div class="fields">
+          <div class="field"><label for="cfg-bus-tx">GPIO TX</label><input id="cfg-bus-tx" type="number" min="-1" max="48" /></div>
+          <div class="field"><label for="cfg-bus-rx">GPIO RX</label><input id="cfg-bus-rx" type="number" min="-1" max="48" /></div>
+          <div class="field"><label for="cfg-bus-de">GPIO DE/RE (RS485, -1 se TTL)</label><input id="cfg-bus-de" type="number" min="-1" max="48" /></div>
+          <div class="field"><label for="cfg-bus-baud">Baudrate</label><input id="cfg-bus-baud" type="number" min="1200" max="115200" /></div>
+          <div class="field"><label for="cfg-bus-timeout">Timeout risposta (ms)</label><input id="cfg-bus-timeout" type="number" min="100" max="8000" /></div>
+          <div class="field"><label for="cfg-bus-retries">Tentativi extra</label><input id="cfg-bus-retries" type="number" min="0" max="5" /></div>
+          <div class="field"><label for="cfg-bus-poll">Polling automatico (s, 0 = off)</label><input id="cfg-bus-poll" type="number" min="0" max="3600" /></div>
+        </div>
+        <dl class="kv" id="bus-kv" style="margin-top:0.75rem"></dl>
+        <table id="boards-status" style="margin-top:0.75rem"></table>
+      </section>
+
+      <section class="panel">
+        <h2>Rete</h2>
+        <div class="switch"><input id="cfg-eth-enabled" type="checkbox" /><label for="cfg-eth-enabled">Ethernet W5500 attiva</label></div>
+        <div class="switch"><input id="cfg-dhcp" type="checkbox" /><label for="cfg-dhcp">Indirizzo automatico (DHCP)</label></div>
+        <div class="fields" style="margin-top:0.75rem">
+          <div class="field"><label for="cfg-hostname">Hostname (dominio locale)</label><input id="cfg-hostname" type="text" placeholder="sheltr" /></div>
+          <div class="field"><label for="cfg-ip">IP statico</label><input id="cfg-ip" type="text" placeholder="192.168.1.50" /></div>
+          <div class="field"><label for="cfg-gateway">Gateway</label><input id="cfg-gateway" type="text" /></div>
+          <div class="field"><label for="cfg-subnet">Netmask</label><input id="cfg-subnet" type="text" placeholder="255.255.255.0" /></div>
+          <div class="field"><label for="cfg-dns1">DNS primario</label><input id="cfg-dns1" type="text" /></div>
+        </div>
+        <p class="muted">Dominio locale: <span class="mono" id="cfg-mdns">http://sheltr.local</span> — le modifiche di rete si applicano al riavvio.</p>
+
+        <h3 style="margin-top:1rem;font-size:0.85rem">WiFi</h3>
+        <div class="fields">
+          <div class="field"><label for="cfg-wifi-ssid">Rete WiFi</label>
+            <div class="row">
+              <input id="cfg-wifi-ssid" type="text" list="wifi-list" style="flex:1" />
+              <button id="btn-scan" class="small">Cerca</button>
+            </div>
+            <datalist id="wifi-list"></datalist>
+          </div>
+          <div class="field"><label for="cfg-wifi-pass">Password WiFi</label><input id="cfg-wifi-pass" type="password" autocomplete="new-password" placeholder="invariata" /></div>
+        </div>
+        <button id="btn-wifi-connect">Connetti ora</button>
+
+        <h3 style="margin-top:1rem;font-size:0.85rem">Hotspot di configurazione</h3>
+        <div class="fields">
+          <div class="field"><label for="cfg-ap-ssid">SSID hotspot</label><input id="cfg-ap-ssid" type="text" placeholder="Sheltr-XXXX" /></div>
+          <div class="field"><label for="cfg-ap-pass">Password hotspot (min 8)</label><input id="cfg-ap-pass" type="password" autocomplete="new-password" placeholder="invariata" /></div>
+        </div>
+        <div class="switch"><input id="cfg-ap-fallback" type="checkbox" /><label for="cfg-ap-fallback">Apri l'hotspot se non c'è connettività</label></div>
+      </section>
+
+      <section class="panel">
+        <h2>Ora e sicurezza</h2>
+        <div class="fields">
+          <div class="field"><label for="cfg-ntp-server">Server NTP</label><input id="cfg-ntp-server" type="text" /></div>
+          <div class="field"><label for="cfg-ntp-tz">Fuso orario (POSIX TZ)</label><input id="cfg-ntp-tz" type="text" /></div>
+        </div>
+        <div class="switch"><input id="cfg-ntp-enabled" type="checkbox" /><label for="cfg-ntp-enabled">Sincronizza l'orologio via NTP (serve per i profili orari)</label></div>
+        <hr style="border:none;border-top:2px solid var(--border);margin:1rem 0" />
+        <div class="switch"><input id="cfg-auth-enabled" type="checkbox" /><label for="cfg-auth-enabled">Richiedi login per interfaccia e API</label></div>
+        <div class="fields" style="margin-top:0.75rem">
+          <div class="field"><label for="cfg-auth-user">Utente</label><input id="cfg-auth-user" type="text" autocomplete="off" /></div>
+          <div class="field"><label for="cfg-auth-pass">Password login</label><input id="cfg-auth-pass" type="password" autocomplete="new-password" placeholder="invariata" /></div>
+          <div class="field"><label for="cfg-system-pass">Password sezione Sistema</label><input id="cfg-system-pass" type="password" autocomplete="new-password" placeholder="invariata" /></div>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Diagnostica protocollo</h2>
+        <p class="muted">Invia un frame grezzo di 14 byte (esadecimale) e leggi la risposta della scheda.</p>
+        <div class="row">
+          <input id="frame-hex" type="text" class="mono" placeholder="49 01 40 00 00 00 00 00 00 00 00 00 00 46" style="flex:1;min-width:16rem" />
+          <button id="btn-frame">Invia</button>
+        </div>
+        <pre class="mono" id="frame-out" style="white-space:pre-wrap;margin-top:0.6rem"></pre>
+      </section>
+
+      <section class="panel">
+        <h2>Aggiornamento firmware</h2>
+        <p class="muted">Carica un file <span class="mono">sheltr-esp-firmware.bin</span>. Il dispositivo si riavvia al termine.</p>
+        <div class="row">
+          <input id="ota-file" type="file" accept=".bin" />
+          <button id="btn-ota">Aggiorna</button>
+          <span class="muted" id="ota-status"></span>
+        </div>
+      </section>
+
+      <section class="panel">
+        <h2>Manutenzione</h2>
+        <div class="row">
+          <button id="btn-restart">Riavvia dispositivo</button>
+          <button class="danger" id="btn-factory">Ripristino configurazione</button>
+        </div>
+      </section>
+
+      <div class="row" style="margin-top:1.25rem">
+        <button class="primary" id="btn-save-system">Salva impostazioni di sistema</button>
+        <span class="muted" id="save-system-hint"></span>
       </div>
-      <pre class="mono" id="frame-out" style="white-space:pre-wrap;margin-top:0.6rem"></pre>
-    </section>
-    <section class="panel">
-      <h2>Aggiornamento firmware</h2>
-      <p class="muted">Carica un file <span class="mono">firmware.bin</span> compilato per questa scheda. Il dispositivo si riavvia al termine.</p>
-      <div class="row">
-        <input id="ota-file" type="file" accept=".bin" />
-        <button id="btn-ota">Aggiorna</button>
-        <span class="muted" id="ota-status"></span>
-      </div>
-    </section>
-    <section class="panel">
-      <h2>Manutenzione</h2>
-      <div class="row">
-        <button id="btn-restart">Riavvia dispositivo</button>
-        <button class="danger" id="btn-factory">Ripristino configurazione</button>
-      </div>
-    </section>
+    </div>
   </div>
 </main>
 
@@ -389,7 +394,31 @@
     <button id="profile-add" class="small">+ Aggiungi fascia</button>
     <div class="row" style="margin-top:1rem">
       <button class="primary" id="profile-save">Applica</button>
-      <span class="muted">Le modifiche vanno salvate con «Salva configurazione».</span>
+      <span class="muted">Ricordati di salvare la configurazione.</span>
+    </div>
+  </div>
+</dialog>
+
+<dialog id="sequence-dialog">
+  <div class="dialog-head">
+    <strong id="sequence-title">Sequenza</strong>
+    <button class="ghost" id="sequence-close">✕</button>
+  </div>
+  <div class="dialog-body">
+    <div class="fields">
+      <div class="field"><label for="sequence-name">Nome</label><input id="sequence-name" type="text" /></div>
+      <div class="field"><label for="sequence-room">Stanza</label><input id="sequence-room" type="text" list="rooms-list" /></div>
+    </div>
+    <datalist id="rooms-list"></datalist>
+    <h3 style="font-size:0.85rem;margin-bottom:0.5rem">Passi</h3>
+    <table id="sequence-steps"></table>
+    <div class="row" style="margin-top:0.6rem">
+      <button id="sequence-add-step" class="small">+ Azione</button>
+      <button id="sequence-add-wait" class="small">+ Attesa</button>
+    </div>
+    <div class="row" style="margin-top:1rem">
+      <button class="primary" id="sequence-save">Applica</button>
+      <span class="muted">Ricordati di salvare la configurazione.</span>
     </div>
   </div>
 </dialog>
@@ -399,6 +428,13 @@
   "use strict";
 
   const DAYS = [["LUN", 1], ["MAR", 2], ["MER", 3], ["GIO", 4], ["VEN", 5], ["SAB", 6], ["DOM", 7]];
+  const KIND_ACTIONS = {
+    light: [["Accendi", "on"], ["Spegni", "off"], ["Inverti", "toggle"]],
+    dimmer: [["Livello", "level"], ["Accendi", "on"], ["Spegni", "off"]],
+    shutter: [["Su", "up"], ["Giù", "down"], ["Stop", "stop"]],
+    thermostat: [["Setpoint", "setpoint"], ["Stagione", "mode"], ["Spegni", "off"]],
+  };
+
   const state = {
     meta: null,
     status: null,
@@ -408,7 +444,9 @@
     room: null,
     busy: new Set(),
     profileTarget: null,
+    sequenceTarget: null,
     token: localStorage.getItem("sheltr_token") || "",
+    systemToken: localStorage.getItem("sheltr_system") || "",
   };
 
   const $ = (id) => document.getElementById(id);
@@ -430,6 +468,7 @@
   async function api(path, options = {}) {
     const init = { method: options.method || "GET", headers: {} };
     if (state.token) init.headers["Authorization"] = "Bearer " + state.token;
+    if (state.systemToken) init.headers["X-Sheltr-System"] = state.systemToken;
     if (options.body !== undefined) {
       init.headers["Content-Type"] = "application/json";
       init.body = JSON.stringify(options.body);
@@ -440,10 +479,19 @@
     if (text) {
       try { data = JSON.parse(text); } catch (error) { data = { raw: text }; }
     }
-    if (response.status === 401) {
+    // Il 401 dello sblocco Sistema significa "password sbagliata", non sessione scaduta:
+    // non deve buttare fuori dall'interfaccia.
+    if (response.status === 401 && !path.startsWith("/api/system/unlock")) {
       state.meta = Object.assign({}, state.meta, { authRequired: true, authenticated: false });
       showLogin();
       throw new Error(data.error || "Autenticazione richiesta");
+    }
+    if (response.status === 401) throw new Error(data.error || "Password non valida");
+    if (response.status === 403) {
+      state.systemToken = "";
+      localStorage.removeItem("sheltr_system");
+      if (state.view === "system") renderSystemGate();
+      throw new Error(data.error || "Sezione protetta");
     }
     if (!response.ok) throw new Error(data.error || ("Errore HTTP " + response.status));
     return data;
@@ -460,8 +508,11 @@
     for (const button of $("tabs").querySelectorAll("button")) {
       button.classList.toggle("active", button.dataset.view === view);
     }
-    if (view === "config" && !state.config) loadConfig();
-    if (view === "system") loadSystem();
+    if (view === "config" && !state.config) loadConfig().catch((error) => toast(error.message, true));
+    if (view === "system") {
+      renderSystemGate();
+      if (state.systemToken) loadSystem().catch(() => {});
+    }
   }
 
   function showLogin() {
@@ -469,31 +520,18 @@
     $("view-login").classList.remove("hidden");
   }
 
-  // ------------------------------------------------------------------ header
-
   function renderHeader() {
     const meta = state.meta || {};
     $("device-name").textContent = meta.name || "Sheltr ESP";
-    $("device-id").textContent = meta.id || "";
     $("btn-logout").classList.toggle("hidden", !meta.authRequired);
 
-    const network = (state.system && state.system.network) || {};
+    const network = meta.network || {};
     const dot = $("net-dot");
     let text = "offline";
     let cls = "dot off";
-    if (network.ethernet && network.ethernet.connected) {
-      text = "ETH " + network.ethernet.ip;
-      cls = "dot on";
-    } else if (network.wifi && network.wifi.connected) {
-      text = "WIFI " + network.wifi.ip;
-      cls = "dot on";
-    } else if (network.accessPoint && network.accessPoint.active) {
-      text = "HOTSPOT " + network.accessPoint.ssid;
-      cls = "dot warn";
-    } else if (meta.apMode) {
-      text = "hotspot";
-      cls = "dot warn";
-    }
+    if (network.interface === "ethernet") { text = "ETH " + network.ip; cls = "dot on"; }
+    else if (network.interface === "wifi") { text = "WIFI " + network.ip; cls = "dot on"; }
+    else if (network.interface === "hotspot") { text = "HOTSPOT " + (network.ssid || ""); cls = "dot warn"; }
     dot.className = cls;
     $("net-text").textContent = text;
   }
@@ -519,28 +557,44 @@
     }
   }
 
-  function tileHead(item, showRoom) {
+  async function toggleFavorite(id, next) {
+    try {
+      await api("/api/favorites", { method: "POST", body: { id, favorite: next } });
+      if (state.config) state.config = null;  // la configurazione in cache non è più allineata
+      await loadStatus(false);
+      toast(next ? "Aggiunto ai preferiti" : "Rimosso dai preferiti");
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+
+  function tileHead(item, showRoom, withProfile = true) {
     const head = el("div", "tile-head");
     const left = el("div");
     left.style.minWidth = "0";
-    const title = el("div", "tile-title", item.name);
-    left.appendChild(title);
+    left.appendChild(el("div", "tile-title", item.name));
     if (showRoom) left.appendChild(el("div", "tile-sub", item.room));
     head.appendChild(left);
 
     const actions = el("div", "tile-actions");
-    const profile = el("button", "ghost small", "◷");
-    profile.title = "Profilo orario";
-    if (item.profile && item.profile.enabled) profile.style.color = "var(--sky)";
-    profile.addEventListener("click", () => openProfile(item));
-    actions.appendChild(profile);
+    if (withProfile) {
+      const profile = el("button", "ghost small", "◷");
+      profile.title = "Profilo orario";
+      if (item.profile && item.profile.enabled) profile.style.color = "var(--sky)";
+      profile.addEventListener("click", () => openProfile(item));
+      actions.appendChild(profile);
+    }
+    const star = el("button", "ghost star" + (item.favorite ? " active" : ""), item.favorite ? "★" : "☆");
+    star.title = item.favorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti";
+    star.addEventListener("click", () => toggleFavorite(item.id, !item.favorite));
+    actions.appendChild(star);
     head.appendChild(actions);
     return head;
   }
 
-  function lightTile(item) {
+  function lightTile(item, showRoom) {
     const tile = el("div", "tile");
-    tile.appendChild(tileHead(item, state.room === null));
+    tile.appendChild(tileHead(item, showRoom));
     const row = el("div", "row2");
     const disabled = state.busy.has(busyKey("light", item.id));
     const on = el("button", "btn-on small" + (item.isOn === true ? " active" : ""), "ON");
@@ -553,9 +607,9 @@
     return tile;
   }
 
-  function dimmerTile(item) {
+  function dimmerTile(item, showRoom) {
     const tile = el("div", "tile");
-    tile.appendChild(tileHead(item, state.room === null));
+    tile.appendChild(tileHead(item, showRoom));
     const disabled = state.busy.has(busyKey("dimmer", item.id));
     const row = el("div", "row2");
     const on = el("button", "btn-sel small" + (item.isOn === true ? " active" : ""), "ON");
@@ -579,13 +633,12 @@
     return tile;
   }
 
-  function shutterTile(item) {
+  function shutterTile(item, showRoom) {
     const tile = el("div", "tile");
-    tile.appendChild(tileHead(item, state.room === null));
+    tile.appendChild(tileHead(item, showRoom));
     const row = el("div", "row3");
     const disabled = state.busy.has(busyKey("shutter", item.id));
-    const actions = [["SU", "up"], ["STOP", "stop"], ["GIU", "down"]];
-    for (const [label, action] of actions) {
+    for (const [label, action] of [["SU", "up"], ["STOP", "stop"], ["GIU", "down"]]) {
       const button = el("button", "btn-sel small" + (item.action === action ? " active" : ""), label);
       button.disabled = disabled;
       button.addEventListener("click", () => command("shutter", item.id, "/api/shutters/command", { shutterId: item.id, action }, "Comando tapparella"));
@@ -595,9 +648,9 @@
     return tile;
   }
 
-  function thermostatTile(item) {
+  function thermostatTile(item, showRoom) {
     const tile = el("div", "tile");
-    const head = tileHead(item, state.room === null);
+    const head = tileHead(item, showRoom);
     const dot = el("span", "dot" + (item.isActive ? " on pulse" : ""));
     dot.title = item.isActive ? "Relè attivo" : "Relè non attivo";
     dot.style.marginRight = "0.35rem";
@@ -605,8 +658,7 @@
     tile.appendChild(head);
 
     const temp = el("div", "temp");
-    const value = (item.temperature === null || item.temperature === undefined) ? "--.-" : Number(item.temperature).toFixed(1);
-    temp.textContent = value;
+    temp.textContent = (item.temperature === null || item.temperature === undefined) ? "--.-" : Number(item.temperature).toFixed(1);
     temp.appendChild(el("small", null, " °C"));
     tile.appendChild(temp);
 
@@ -641,33 +693,42 @@
     return tile;
   }
 
-  function renderRoomsNav() {
-    const nav = $("rooms-nav");
-    nav.innerHTML = "";
-    const rooms = (state.status && state.status.rooms) || [];
-    const all = el("button", "small" + (state.room === null ? " primary" : ""), "Tutti");
-    all.addEventListener("click", () => { state.room = null; renderControl(); });
-    nav.appendChild(all);
-    for (const room of rooms) {
-      const count = room.lights.length + room.dimmers.length + room.shutters.length + room.thermostats.length;
-      if (!count) continue;
-      const button = el("button", "small" + (state.room === room.name ? " primary" : ""), room.name + " (" + count + ")");
-      if (state.room !== room.name) button.style.borderColor = room.color;
-      button.addEventListener("click", () => { state.room = room.name; renderControl(); });
-      nav.appendChild(button);
-    }
+  function sequenceTile(item, showRoom) {
+    const tile = el("div", "tile");
+    tile.appendChild(tileHead(item, showRoom, false));
+    tile.appendChild(el("div", "tile-sub", item.steps + (item.steps === 1 ? " passo" : " passi")));
+    const running = state.status && state.status.sequencer && state.status.sequencer.running &&
+      state.status.sequencer.id === item.id;
+    const run = el("button", "btn-sel small" + (running ? " active" : ""), running ? "IN CORSO…" : "ESEGUI");
+    run.disabled = running || state.busy.has(busyKey("sequence", item.id));
+    run.addEventListener("click", () => command("sequence", item.id,
+      "/api/sequences/" + encodeURIComponent(item.id) + "/run", {}, "Sequenza"));
+    tile.appendChild(run);
+    return tile;
   }
 
-  function renderSection(container, title, items, builder) {
+  function tileFor(item, showRoom) {
+    if (item.kind === "sequence") return sequenceTile(item, showRoom);
+    if (item.kind === "dimmer") return dimmerTile(item, showRoom);
+    if (item.kind === "shutter") return shutterTile(item, showRoom);
+    if (item.kind === "thermostat") return thermostatTile(item, showRoom);
+    return lightTile(item, showRoom);
+  }
+
+  function roomItems(room) {
+    return [].concat(room.lights || [], room.dimmers || [], room.shutters || [],
+                     room.thermostats || [], room.sequences || []);
+  }
+
+  function renderSection(container, title, items, showRoom) {
     if (!items.length) return;
     container.appendChild(el("h2", "section-title", title));
     const grid = el("div", "grid");
-    for (const item of items) grid.appendChild(builder(item));
+    for (const item of items) grid.appendChild(tileFor(item, showRoom));
     container.appendChild(grid);
   }
 
   function renderControl() {
-    renderRoomsNav();
     const body = $("control-body");
     body.innerHTML = "";
     const status = state.status;
@@ -678,52 +739,70 @@
 
     const banner = $("control-banner");
     banner.innerHTML = "";
-    if (status.device && status.device.online === false) {
-      banner.appendChild(el("div", "banner", "Nessuna scheda risponde sul bus: controlla il cablaggio, gli indirizzi e il baudrate."));
-    }
     if (Array.isArray(status.refreshErrors) && status.refreshErrors.length) {
       const list = status.refreshErrors.map((item) => "indirizzo " + item.address + " (" + item.error + ")").join(", ");
       banner.appendChild(el("div", "banner", "Polling non riuscito su: " + list));
     }
 
-    const rooms = (status.rooms || []).filter((room) => state.room === null || room.name === state.room);
-    const lights = [], dimmers = [], shutters = [], thermostats = [];
-    for (const room of rooms) {
-      lights.push(...room.lights);
-      dimmers.push(...room.dimmers);
-      shutters.push(...room.shutters);
-      thermostats.push(...room.thermostats);
+    const rooms = (status.rooms || []).filter((room) => roomItems(room).length);
+
+    // --- dettaglio di una stanza
+    if (state.room !== null) {
+      const room = rooms.find((item) => item.name === state.room);
+      if (!room) { state.room = null; renderControl(); return; }
+      const crumb = el("div", "crumb");
+      const back = el("button", "small", "← Stanze");
+      back.addEventListener("click", () => { state.room = null; renderControl(); });
+      crumb.appendChild(back);
+      crumb.appendChild(el("h2", null, room.name));
+      body.appendChild(crumb);
+
+      renderSection(body, "Luci", room.lights || [], false);
+      renderSection(body, "Dimmer", room.dimmers || [], false);
+      renderSection(body, "Tapparelle", room.shutters || [], false);
+      renderSection(body, "Termostati", room.thermostats || [], false);
+      renderSection(body, "Sequenze", room.sequences || [], false);
+      return;
     }
 
-    if (state.room === null && rooms.length > 1) {
-      const grid = el("div", "rooms");
-      for (const room of rooms) {
-        const count = room.lights.length + room.dimmers.length + room.shutters.length + room.thermostats.length;
-        if (!count) continue;
-        const card = el("button", "room-card");
-        card.style.background = room.color;
-        card.appendChild(el("strong", null, room.name));
-        const parts = [];
-        if (room.lights.length) parts.push(room.lights.length + " luci");
-        if (room.dimmers.length) parts.push(room.dimmers.length + " dimmer");
-        if (room.shutters.length) parts.push(room.shutters.length + " tapparelle");
-        if (room.thermostats.length) parts.push(room.thermostats.length + " termostati");
-        card.appendChild(el("small", null, parts.join(" · ")));
-        card.addEventListener("click", () => { state.room = room.name; renderControl(); });
-        grid.appendChild(card);
+    // --- preferiti
+    const favorites = [];
+    for (const room of rooms) {
+      for (const item of roomItems(room)) {
+        if (item.favorite) favorites.push(item);
       }
-      body.appendChild(el("h2", "section-title", "Stanze"));
+    }
+    if (favorites.length) {
+      body.appendChild(el("h2", "section-title", "Preferiti"));
+      const grid = el("div", "grid");
+      for (const item of favorites) grid.appendChild(tileFor(item, true));
       body.appendChild(grid);
     }
 
-    renderSection(body, "Luci", lights, lightTile);
-    renderSection(body, "Dimmer", dimmers, dimmerTile);
-    renderSection(body, "Tapparelle", shutters, shutterTile);
-    renderSection(body, "Termostati", thermostats, thermostatTile);
-
-    if (!lights.length && !dimmers.length && !shutters.length && !thermostats.length) {
-      body.appendChild(el("p", "muted", "Nessun dispositivo configurato: aggiungi le schede dalla configurazione."));
+    // --- stanze
+    if (!rooms.length) {
+      body.appendChild(el("div", "empty",
+        "Nessun dispositivo configurato: aggiungi le schede dalla sezione Configurazione."));
+      return;
     }
+
+    body.appendChild(el("h2", "section-title", "Stanze"));
+    const grid = el("div", "rooms");
+    for (const room of rooms) {
+      const card = el("button", "room-card");
+      card.style.background = room.color;
+      card.appendChild(el("strong", null, room.name));
+      const parts = [];
+      if ((room.lights || []).length) parts.push(room.lights.length + " luci");
+      if ((room.dimmers || []).length) parts.push(room.dimmers.length + " dimmer");
+      if ((room.shutters || []).length) parts.push(room.shutters.length + " tapparelle");
+      if ((room.thermostats || []).length) parts.push(room.thermostats.length + " termostati");
+      if ((room.sequences || []).length) parts.push(room.sequences.length + " sequenze");
+      card.appendChild(el("small", null, parts.join(" · ")));
+      card.addEventListener("click", () => { state.room = room.name; renderControl(); });
+      grid.appendChild(card);
+    }
+    body.appendChild(grid);
   }
 
   // -------------------------------------------------------- profili orari
@@ -742,9 +821,13 @@
     if (!state.config) await loadConfig();
     const found = findConfigChannel(item.id);
     if (!found) { toast("Canale non trovato in configurazione", true); return; }
-    state.profileTarget = found;
-    $("profile-title").textContent = "Profilo orario · " + found.channel.name;
-    $("profile-enabled").checked = Boolean(found.channel.profile && found.channel.profile.enabled);
+    openProfileDialog(found.board, found.channel);
+  }
+
+  function openProfileDialog(board, channel) {
+    state.profileTarget = { board, channel };
+    $("profile-title").textContent = "Profilo orario · " + channel.name;
+    $("profile-enabled").checked = Boolean(channel.profile && channel.profile.enabled);
     renderProfileEntries();
     $("profile-dialog").showModal();
   }
@@ -764,41 +847,13 @@
       if (kind === "thermostat") {
         fields.appendChild(timeField("Dalle", entry.from || "00:00", (value) => { entry.from = value; }));
         fields.appendChild(timeField("Alle", entry.to || "23:59", (value) => { entry.to = value; }));
-        const setpoint = el("div", "field");
-        setpoint.appendChild(el("label", null, "Setpoint °C"));
-        const input = document.createElement("input");
-        input.type = "number"; input.min = "5"; input.max = "30"; input.step = "0.5";
-        input.value = String(entry.setpoint ?? 21);
-        input.addEventListener("change", () => { entry.setpoint = Number(input.value); });
-        setpoint.appendChild(input);
-        fields.appendChild(setpoint);
-        const mode = el("div", "field");
-        mode.appendChild(el("label", null, "Stagione"));
-        const select = document.createElement("select");
-        for (const [label, value] of [["Inverno", "winter"], ["Estate", "summer"]]) {
-          const option = document.createElement("option");
-          option.value = value; option.textContent = label;
-          if ((entry.mode || "winter") === value) option.selected = true;
-          select.appendChild(option);
-        }
-        select.addEventListener("change", () => { entry.mode = select.value; });
-        mode.appendChild(select);
-        fields.appendChild(mode);
+        fields.appendChild(numberField("Setpoint °C", entry.setpoint ?? 21, 5, 30, (value) => { entry.setpoint = value; }, 0.5));
+        fields.appendChild(selectField("Stagione", [["Inverno", "winter"], ["Estate", "summer"]],
+          entry.mode || "winter", (value) => { entry.mode = value; }));
       } else {
         fields.appendChild(timeField("Orario", entry.time || "00:00", (value) => { entry.time = value; }));
-        const action = el("div", "field");
-        action.appendChild(el("label", null, "Azione"));
-        const select = document.createElement("select");
         const options = kind === "shutter" ? [["Su", "up"], ["Giù", "down"]] : [["Accendi", "on"], ["Spegni", "off"]];
-        for (const [label, value] of options) {
-          const option = document.createElement("option");
-          option.value = value; option.textContent = label;
-          if (entry.action === value) option.selected = true;
-          select.appendChild(option);
-        }
-        select.addEventListener("change", () => { entry.action = select.value; });
-        action.appendChild(select);
-        fields.appendChild(action);
+        fields.appendChild(selectField("Azione", options, entry.action || options[0][1], (value) => { entry.action = value; }));
       }
       box.appendChild(fields);
 
@@ -825,6 +880,213 @@
     if (!profile.entries.length) container.appendChild(el("p", "muted", "Nessuna fascia impostata."));
   }
 
+  // ------------------------------------------------------------- sequencer
+
+  function allChannels() {
+    const list = [];
+    for (const board of (state.config && state.config.boards) || []) {
+      for (const channel of board.channels || []) {
+        list.push({
+          id: board.id + "-c" + channel.channel,
+          kind: board.kind,
+          label: channel.name + " · " + channel.room,
+        });
+      }
+    }
+    return list;
+  }
+
+  function channelKind(channelId) {
+    const found = allChannels().find((item) => item.id === channelId);
+    return found ? found.kind : "light";
+  }
+
+  function renderSequences() {
+    const container = $("sequences");
+    container.innerHTML = "";
+    const sequences = (state.config && state.config.sequences) || [];
+    if (!sequences.length) {
+      container.appendChild(el("p", "muted", "Nessuna sequenza configurata."));
+      return;
+    }
+    sequences.forEach((sequence, index) => {
+      const box = el("div", "board");
+      const head = el("div", "board-head");
+      const title = el("div");
+      title.appendChild(el("strong", null, sequence.name || sequence.id));
+      title.appendChild(el("div", "muted", (sequence.room || "Senza stanza") + " · " +
+        (sequence.steps || []).length + " passi"));
+      head.appendChild(title);
+
+      const actions = el("div", "row");
+      const run = el("button", "small", "Esegui");
+      run.addEventListener("click", async () => {
+        try {
+          await api("/api/sequences/" + encodeURIComponent(sequence.id) + "/run", { method: "POST" });
+          toast("Sequenza avviata");
+        } catch (error) { toast(error.message, true); }
+      });
+      const edit = el("button", "small", "Modifica");
+      edit.addEventListener("click", () => openSequenceDialog(sequence));
+      const remove = el("button", "small danger", "Elimina");
+      remove.addEventListener("click", () => {
+        state.config.sequences.splice(index, 1);
+        renderSequences();
+      });
+      actions.appendChild(run); actions.appendChild(edit); actions.appendChild(remove);
+      head.appendChild(actions);
+      box.appendChild(head);
+      container.appendChild(box);
+    });
+  }
+
+  function openSequenceDialog(sequence) {
+    state.sequenceTarget = sequence;
+    $("sequence-title").textContent = "Sequenza · " + (sequence.name || sequence.id);
+    $("sequence-name").value = sequence.name || "";
+    $("sequence-room").value = sequence.room || "";
+    const rooms = new Set();
+    for (const board of (state.config && state.config.boards) || []) {
+      for (const channel of board.channels || []) rooms.add(channel.room);
+    }
+    const list = $("rooms-list");
+    list.innerHTML = "";
+    for (const room of rooms) {
+      const option = document.createElement("option");
+      option.value = room;
+      list.appendChild(option);
+    }
+    renderSequenceSteps();
+    $("sequence-dialog").showModal();
+  }
+
+  function renderSequenceSteps() {
+    const sequence = state.sequenceTarget;
+    const table = $("sequence-steps");
+    table.innerHTML = "";
+    if (!sequence) return;
+    sequence.steps = sequence.steps || [];
+
+    const header = document.createElement("tr");
+    for (const label of ["#", "Dispositivo", "Azione", "Valore", "Attesa (s)", ""]) {
+      header.appendChild(el("th", null, label));
+    }
+    table.appendChild(header);
+
+    sequence.steps.forEach((step, index) => {
+      const row = document.createElement("tr");
+      row.appendChild(el("td", "mono", String(index + 1)));
+
+      // dispositivo
+      const deviceCell = document.createElement("td");
+      const deviceSelect = document.createElement("select");
+      const waitOption = document.createElement("option");
+      waitOption.value = ""; waitOption.textContent = "— solo attesa —";
+      deviceSelect.appendChild(waitOption);
+      for (const channel of allChannels()) {
+        const option = document.createElement("option");
+        option.value = channel.id;
+        option.textContent = channel.label;
+        if (step.channelId === channel.id) option.selected = true;
+        deviceSelect.appendChild(option);
+      }
+      deviceSelect.value = step.channelId || "";
+      deviceSelect.addEventListener("change", () => {
+        step.channelId = deviceSelect.value;
+        step.action = "";
+        renderSequenceSteps();
+      });
+      deviceCell.appendChild(deviceSelect);
+      row.appendChild(deviceCell);
+
+      // azione
+      const actionCell = document.createElement("td");
+      if (step.channelId) {
+        const kind = channelKind(step.channelId);
+        const options = KIND_ACTIONS[kind] || KIND_ACTIONS.light;
+        if (!step.action) step.action = options[0][1];
+        const actionSelect = document.createElement("select");
+        for (const [label, value] of options) {
+          const option = document.createElement("option");
+          option.value = value; option.textContent = label;
+          if (step.action === value) option.selected = true;
+          actionSelect.appendChild(option);
+        }
+        actionSelect.addEventListener("change", () => { step.action = actionSelect.value; renderSequenceSteps(); });
+        actionCell.appendChild(actionSelect);
+      } else {
+        actionCell.appendChild(el("span", "muted", "attesa"));
+      }
+      row.appendChild(actionCell);
+
+      // valore
+      const valueCell = document.createElement("td");
+      if (step.channelId) {
+        const kind = channelKind(step.channelId);
+        if (kind === "dimmer" && step.action === "level") {
+          valueCell.appendChild(numberInput(step.value ?? 5, 0, 9, 1, (value) => { step.value = value; }));
+        } else if (kind === "thermostat" && step.action === "setpoint") {
+          valueCell.appendChild(numberInput(step.value ?? 21, 5, 30, 0.5, (value) => { step.value = value; }));
+        } else if (kind === "thermostat" && step.action === "mode") {
+          const select = document.createElement("select");
+          for (const [label, value] of [["Inverno", "winter"], ["Estate", "summer"]]) {
+            const option = document.createElement("option");
+            option.value = value; option.textContent = label;
+            if ((step.mode || "winter") === value) option.selected = true;
+            select.appendChild(option);
+          }
+          select.addEventListener("change", () => { step.mode = select.value; });
+          valueCell.appendChild(select);
+        } else {
+          valueCell.appendChild(el("span", "muted", "—"));
+        }
+      } else {
+        valueCell.appendChild(el("span", "muted", "—"));
+      }
+      row.appendChild(valueCell);
+
+      // attesa
+      const delayCell = document.createElement("td");
+      delayCell.appendChild(numberInput(step.delaySec ?? 0, 0, 3600, 1, (value) => { step.delaySec = value; }));
+      row.appendChild(delayCell);
+
+      // azioni riga
+      const toolsCell = document.createElement("td");
+      const tools = el("div", "row");
+      const up = el("button", "small", "↑");
+      up.disabled = index === 0;
+      up.addEventListener("click", () => {
+        const [item] = sequence.steps.splice(index, 1);
+        sequence.steps.splice(index - 1, 0, item);
+        renderSequenceSteps();
+      });
+      const down = el("button", "small", "↓");
+      down.disabled = index === sequence.steps.length - 1;
+      down.addEventListener("click", () => {
+        const [item] = sequence.steps.splice(index, 1);
+        sequence.steps.splice(index + 1, 0, item);
+        renderSequenceSteps();
+      });
+      const remove = el("button", "small danger", "✕");
+      remove.addEventListener("click", () => { sequence.steps.splice(index, 1); renderSequenceSteps(); });
+      tools.appendChild(up); tools.appendChild(down); tools.appendChild(remove);
+      toolsCell.appendChild(tools);
+      row.appendChild(toolsCell);
+
+      table.appendChild(row);
+    });
+
+    if (!sequence.steps.length) {
+      const row = document.createElement("tr");
+      const cell = el("td", "muted", "Nessun passo: aggiungi un'azione o un'attesa.");
+      cell.colSpan = 6;
+      row.appendChild(cell);
+      table.appendChild(row);
+    }
+  }
+
+  // --------------------------------------------------------- campi riusabili
+
   function timeField(label, value, onChange) {
     const field = el("div", "field");
     field.appendChild(el("label", null, label));
@@ -835,47 +1097,87 @@
     return field;
   }
 
+  function numberInput(value, min, max, step, onChange) {
+    const input = document.createElement("input");
+    input.type = "number"; input.min = String(min); input.max = String(max); input.step = String(step);
+    input.value = String(value);
+    input.addEventListener("change", () => onChange(Number(input.value)));
+    return input;
+  }
+
+  function numberField(label, value, min, max, onChange, step = 1) {
+    const field = el("div", "field");
+    field.appendChild(el("label", null, label));
+    field.appendChild(numberInput(value ?? min, min, max, step, onChange));
+    return field;
+  }
+
+  function selectField(label, options, value, onChange) {
+    const field = el("div", "field");
+    field.appendChild(el("label", null, label));
+    const select = document.createElement("select");
+    for (const [text, optionValue] of options) {
+      const option = document.createElement("option");
+      option.value = optionValue; option.textContent = text;
+      if (value === optionValue) option.selected = true;
+      select.appendChild(option);
+    }
+    select.addEventListener("change", () => onChange(select.value));
+    field.appendChild(select);
+    return field;
+  }
+
+  function textField(label, value, onChange) {
+    const field = el("div", "field");
+    field.appendChild(el("label", null, label));
+    const input = document.createElement("input");
+    input.type = "text"; input.value = value || "";
+    input.addEventListener("change", () => onChange(input.value));
+    field.appendChild(input);
+    return field;
+  }
+
+  function inputCell(value, onChange) {
+    const cell = document.createElement("td");
+    const input = document.createElement("input");
+    input.type = "text"; input.value = value || "";
+    input.addEventListener("change", () => onChange(input.value));
+    cell.appendChild(input);
+    return cell;
+  }
+
   // ------------------------------------------------------------ configurazione
 
   function renderBoards() {
     const container = $("boards");
     container.innerHTML = "";
     const boards = (state.config && state.config.boards) || [];
+    if (!boards.length) {
+      container.appendChild(el("p", "muted", "Nessuna scheda configurata: premi «Aggiungi scheda» per iniziare."));
+      return;
+    }
     boards.forEach((board, index) => {
       const box = el("div", "board");
       const head = el("div", "board-head");
       head.appendChild(el("strong", null, board.name || board.id));
       const remove = el("button", "small danger", "Elimina");
-      remove.addEventListener("click", () => {
-        if (boards.length <= 1) { toast("Serve almeno una scheda", true); return; }
-        boards.splice(index, 1);
-        renderBoards();
-      });
+      remove.addEventListener("click", () => { boards.splice(index, 1); renderBoards(); });
       head.appendChild(remove);
       box.appendChild(head);
 
       const fields = el("div", "fields");
       fields.appendChild(textField("Nome", board.name, (value) => { board.name = value; }));
       fields.appendChild(textField("ID", board.id, (value) => { board.id = value; }));
-      const kind = el("div", "field");
-      kind.appendChild(el("label", null, "Tipo"));
-      const select = document.createElement("select");
-      for (const [label, value] of [["Luci", "light"], ["Tapparelle", "shutter"], ["Dimmer", "dimmer"], ["Termostato", "thermostat"]]) {
-        const option = document.createElement("option");
-        option.value = value; option.textContent = label;
-        if (board.kind === value) option.selected = true;
-        select.appendChild(option);
-      }
-      select.addEventListener("change", () => {
-        board.kind = select.value;
-        const max = board.kind === "light" ? 8 : board.kind === "shutter" ? 4 : 1;
-        board.channelStart = 1;
-        board.channelEnd = max;
-        board.channels = buildChannels(board);
-        renderBoards();
-      });
-      kind.appendChild(select);
-      fields.appendChild(kind);
+      fields.appendChild(selectField("Tipo",
+        [["Luci", "light"], ["Tapparelle", "shutter"], ["Dimmer", "dimmer"], ["Termostato", "thermostat"]],
+        board.kind, (value) => {
+          board.kind = value;
+          const max = value === "light" ? 8 : value === "shutter" ? 4 : 1;
+          board.channelStart = 1;
+          board.channelEnd = max;
+          board.channels = buildChannels(board);
+          renderBoards();
+        }));
       fields.appendChild(numberField("Indirizzo", board.address, 0, 254, (value) => { board.address = value; }));
       fields.appendChild(numberField("Canale iniziale", board.channelStart, 1, 8, (value) => {
         board.channelStart = value; board.channels = buildChannels(board); renderBoards();
@@ -887,22 +1189,26 @@
 
       const table = document.createElement("table");
       const header = document.createElement("tr");
-      for (const label of ["CH", "Nome", "Stanza", "Profilo"]) header.appendChild(el("th", null, label));
+      for (const label of ["CH", "Nome", "Stanza", "Preferito", "Profilo"]) header.appendChild(el("th", null, label));
       table.appendChild(header);
       for (const channel of board.channels || []) {
         const row = document.createElement("tr");
         row.appendChild(el("td", "mono", String(channel.channel)));
         row.appendChild(inputCell(channel.name, (value) => { channel.name = value; }));
         row.appendChild(inputCell(channel.room, (value) => { channel.room = value; }));
+
+        const favoriteCell = document.createElement("td");
+        const star = el("button", "ghost star" + (channel.favorite ? " active" : ""), channel.favorite ? "★" : "☆");
+        star.addEventListener("click", () => {
+          channel.favorite = !channel.favorite;
+          renderBoards();
+        });
+        favoriteCell.appendChild(star);
+        row.appendChild(favoriteCell);
+
         const profileCell = document.createElement("td");
         const button = el("button", "small", (channel.profile && channel.profile.enabled) ? "Attivo" : "Imposta");
-        button.addEventListener("click", () => {
-          state.profileTarget = { board, channel };
-          $("profile-title").textContent = "Profilo orario · " + channel.name;
-          $("profile-enabled").checked = Boolean(channel.profile && channel.profile.enabled);
-          renderProfileEntries();
-          $("profile-dialog").showModal();
-        });
+        button.addEventListener("click", () => openProfileDialog(board, channel));
         profileCell.appendChild(button);
         row.appendChild(profileCell);
         table.appendChild(row);
@@ -923,6 +1229,7 @@
         channel: number,
         name: defaultChannelName(board.kind, number),
         room: "Senza stanza",
+        favorite: false,
         profile: { enabled: false, entries: [] },
       });
     }
@@ -936,51 +1243,11 @@
     return "Luce " + channel;
   }
 
-  function textField(label, value, onChange) {
-    const field = el("div", "field");
-    field.appendChild(el("label", null, label));
-    const input = document.createElement("input");
-    input.type = "text"; input.value = value || "";
-    input.addEventListener("change", () => onChange(input.value));
-    field.appendChild(input);
-    return field;
-  }
-
-  function numberField(label, value, min, max, onChange) {
-    const field = el("div", "field");
-    field.appendChild(el("label", null, label));
-    const input = document.createElement("input");
-    input.type = "number"; input.min = String(min); input.max = String(max);
-    input.value = String(value ?? min);
-    input.addEventListener("change", () => onChange(Number(input.value)));
-    field.appendChild(input);
-    return field;
-  }
-
-  function inputCell(value, onChange) {
-    const cell = document.createElement("td");
-    const input = document.createElement("input");
-    input.type = "text"; input.value = value || "";
-    input.addEventListener("change", () => onChange(input.value));
-    cell.appendChild(input);
-    return cell;
-  }
-
   function fillConfigForm() {
     const config = state.config;
     if (!config) return;
     $("cfg-name").value = config.device.name || "";
     $("cfg-id").value = config.device.id || "";
-    $("cfg-hostname").value = config.network.hostname || "";
-    $("cfg-mdns").textContent = "http://" + (config.network.hostname || "sheltr") + ".local";
-
-    $("cfg-bus-tx").value = config.bus.tx;
-    $("cfg-bus-rx").value = config.bus.rx;
-    $("cfg-bus-de").value = config.bus.de;
-    $("cfg-bus-baud").value = config.bus.baud;
-    $("cfg-bus-timeout").value = config.bus.timeoutMs;
-    $("cfg-bus-retries").value = config.bus.retries;
-    $("cfg-bus-poll").value = config.bus.pollIntervalSec;
 
     $("cfg-mqtt-enabled").checked = config.mqtt.enabled;
     $("cfg-mqtt-host").value = config.mqtt.host || "";
@@ -1002,6 +1269,17 @@
     $("cfg-cloud-format").value = config.cloud.payloadFormat || "frame_hex_space_crlf";
     updateCloudTopics();
 
+    // sezione Sistema
+    $("cfg-bus-tx").value = config.bus.tx;
+    $("cfg-bus-rx").value = config.bus.rx;
+    $("cfg-bus-de").value = config.bus.de;
+    $("cfg-bus-baud").value = config.bus.baud;
+    $("cfg-bus-timeout").value = config.bus.timeoutMs;
+    $("cfg-bus-retries").value = config.bus.retries;
+    $("cfg-bus-poll").value = config.bus.pollIntervalSec;
+
+    $("cfg-hostname").value = config.network.hostname || "";
+    $("cfg-mdns").textContent = "http://" + (config.network.hostname || "sheltr") + ".local";
     $("cfg-eth-enabled").checked = config.network.ethEnabled;
     $("cfg-dhcp").checked = config.network.dhcp;
     $("cfg-ip").value = config.network.ip || "";
@@ -1021,8 +1299,10 @@
     $("cfg-auth-enabled").checked = config.auth.enabled;
     $("cfg-auth-user").value = config.auth.username || "";
     $("cfg-auth-pass").value = "";
+    $("cfg-system-pass").value = "";
 
     renderBoards();
+    renderSequences();
   }
 
   function updateCloudTopics() {
@@ -1033,16 +1313,7 @@
   function collectConfig() {
     const config = state.config;
     config.device.name = $("cfg-name").value;
-    config.device.id = $("cfg-id").value;
-    config.network.hostname = $("cfg-hostname").value;
-
-    config.bus.tx = Number($("cfg-bus-tx").value);
-    config.bus.rx = Number($("cfg-bus-rx").value);
-    config.bus.de = Number($("cfg-bus-de").value);
-    config.bus.baud = Number($("cfg-bus-baud").value);
-    config.bus.timeoutMs = Number($("cfg-bus-timeout").value);
-    config.bus.retries = Number($("cfg-bus-retries").value);
-    config.bus.pollIntervalSec = Number($("cfg-bus-poll").value);
+    delete config.device.id;  // l'UUID non si modifica
 
     config.mqtt.enabled = $("cfg-mqtt-enabled").checked;
     config.mqtt.host = $("cfg-mqtt-host").value;
@@ -1065,6 +1336,15 @@
     if ($("cfg-cloud-pass").value) config.cloud.password = $("cfg-cloud-pass").value;
     else delete config.cloud.password;
 
+    config.bus.tx = Number($("cfg-bus-tx").value);
+    config.bus.rx = Number($("cfg-bus-rx").value);
+    config.bus.de = Number($("cfg-bus-de").value);
+    config.bus.baud = Number($("cfg-bus-baud").value);
+    config.bus.timeoutMs = Number($("cfg-bus-timeout").value);
+    config.bus.retries = Number($("cfg-bus-retries").value);
+    config.bus.pollIntervalSec = Number($("cfg-bus-poll").value);
+
+    config.network.hostname = $("cfg-hostname").value;
     config.network.ethEnabled = $("cfg-eth-enabled").checked;
     config.network.dhcp = $("cfg-dhcp").checked;
     config.network.ip = $("cfg-ip").value;
@@ -1087,11 +1367,38 @@
     config.auth.username = $("cfg-auth-user").value;
     if ($("cfg-auth-pass").value) config.auth.password = $("cfg-auth-pass").value;
     else delete config.auth.password;
+    if ($("cfg-system-pass").value) config.auth.systemPassword = $("cfg-system-pass").value;
+    else delete config.auth.systemPassword;
 
     return config;
   }
 
+  async function saveConfig(hintId) {
+    const button = hintId === "save-system-hint" ? $("btn-save-system") : $("btn-save");
+    button.disabled = true;
+    try {
+      const data = await api("/api/config", { method: "PUT", body: collectConfig() });
+      $(hintId).textContent = "Salvata (revisione " + data.revision + ")";
+      toast(data.restartRequired
+        ? "Salvata: riavvia il dispositivo per applicare le impostazioni di rete"
+        : "Configurazione salvata");
+      await loadConfig();
+      await loadStatus(false);
+    } catch (error) {
+      $(hintId).textContent = "";
+      toast(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   // ------------------------------------------------------------------ sistema
+
+  function renderSystemGate() {
+    const unlocked = Boolean(state.systemToken);
+    $("system-lock").classList.toggle("hidden", unlocked);
+    $("system-content").classList.toggle("hidden", !unlocked);
+  }
 
   function renderSystem() {
     const system = state.system;
@@ -1101,8 +1408,10 @@
     const rows = [
       ["Firmware", system.firmware],
       ["Scheda", system.board],
+      ["ID dispositivo", system.id],
       ["Protocollo", system.protocolVersion],
       ["Uptime", formatUptime(system.uptimeSec)],
+      ["Filesystem", system.filesystem],
       ["Heap libero", formatBytes(system.freeHeap)],
       ["PSRAM libera", formatBytes(system.freePsram)],
       ["Spazio OTA", formatBytes(system.freeSketchSpace)],
@@ -1114,6 +1423,7 @@
       ["MQTT locale", system.mqtt.local.enabled ? (system.mqtt.local.connected ? "connesso a " + system.mqtt.local.host : "disconnesso · " + (system.mqtt.local.lastError || "")) : "disabilitato"],
       ["Sheltr Cloud", system.mqtt.cloud.enabled ? (system.mqtt.cloud.connected ? "connesso a " + system.mqtt.cloud.host : "disconnesso · " + (system.mqtt.cloud.lastError || "")) : "disabilitato"],
       ["Profili orari", system.schedules.appliedCount + " applicazioni"],
+      ["Sequenze eseguite", system.sequencer ? system.sequencer.runCount : 0],
     ];
     for (const [key, value] of rows) {
       kv.appendChild(el("dt", null, key));
@@ -1122,16 +1432,12 @@
 
     const busKv = $("bus-kv");
     busKv.innerHTML = "";
-    const busRows = [
-      ["Pin", "TX " + system.bus.tx + " · RX " + system.bus.rx + " · DE " + system.bus.de],
-      ["Baudrate", system.bus.baud + " 8N1"],
-      ["Timeout", system.bus.timeoutMs + " ms"],
+    for (const [key, value] of [
       ["Frame inviati", system.bus.framesSent],
       ["Risposte valide", system.bus.framesOk],
       ["Errori", system.bus.framesError],
       ["Ultimo errore", system.bus.lastError || "—"],
-    ];
-    for (const [key, value] of busRows) {
+    ]) {
       busKv.appendChild(el("dt", null, key));
       busKv.appendChild(el("dd", null, String(value)));
     }
@@ -1172,6 +1478,10 @@
 
   async function loadMeta() {
     state.meta = await api("/api/meta");
+    if (!state.meta.systemUnlocked && state.systemToken) {
+      state.systemToken = "";
+      localStorage.removeItem("sheltr_system");
+    }
     renderHeader();
     if (state.meta.authRequired && !state.meta.authenticated) {
       showLogin();
@@ -1183,7 +1493,7 @@
   async function loadStatus(refresh) {
     state.status = await api("/api/status" + (refresh ? "?refresh=1" : ""));
     renderControl();
-    if (state.view === "system") renderSystem();
+    if (state.view === "system" && state.systemToken) renderSystem();
   }
 
   async function loadConfig() {
@@ -1192,8 +1502,8 @@
   }
 
   async function loadSystem() {
+    if (!state.systemToken) return;
     state.system = await api("/api/system");
-    renderHeader();
     renderSystem();
   }
 
@@ -1237,9 +1547,32 @@
       showLogin();
     });
 
+    $("btn-system-unlock").addEventListener("click", async () => {
+      try {
+        const data = await api("/api/system/unlock", { method: "POST", body: { password: $("system-pass").value } });
+        state.systemToken = data.token;
+        localStorage.setItem("sheltr_system", state.systemToken);
+        $("system-pass").value = "";
+        renderSystemGate();
+        if (!state.config) await loadConfig();
+        await loadSystem();
+        toast("Sezione Sistema sbloccata");
+      } catch (error) {
+        toast(error.message, true);
+      }
+    });
+
+    $("btn-system-lock").addEventListener("click", async () => {
+      try { await api("/api/system/lock", { method: "POST" }); } catch (error) { /* ignora */ }
+      state.systemToken = "";
+      localStorage.removeItem("sheltr_system");
+      renderSystemGate();
+    });
+
     $("btn-add-board").addEventListener("click", () => {
       if (!state.config) return;
-      const index = (state.config.boards || []).length + 1;
+      state.config.boards = state.config.boards || [];
+      const index = state.config.boards.length + 1;
       const board = {
         id: "board-" + index,
         name: "Scheda " + index,
@@ -1254,24 +1587,18 @@
       renderBoards();
     });
 
-    $("btn-save").addEventListener("click", async () => {
-      $("btn-save").disabled = true;
-      try {
-        const payload = collectConfig();
-        const data = await api("/api/config", { method: "PUT", body: payload });
-        $("save-hint").textContent = "Salvata (revisione " + data.revision + ")";
-        toast(data.restartRequired
-          ? "Configurazione salvata: riavvia il dispositivo per applicare le impostazioni di rete"
-          : "Configurazione salvata");
-        await loadConfig();
-        await loadStatus(false);
-      } catch (error) {
-        toast(error.message, true);
-      } finally {
-        $("btn-save").disabled = false;
-      }
+    $("btn-add-sequence").addEventListener("click", () => {
+      if (!state.config) return;
+      state.config.sequences = state.config.sequences || [];
+      const index = state.config.sequences.length + 1;
+      const sequence = { id: "seq-" + index, name: "Sequenza " + index, room: "Senza stanza", favorite: false, steps: [] };
+      state.config.sequences.push(sequence);
+      renderSequences();
+      openSequenceDialog(sequence);
     });
 
+    $("btn-save").addEventListener("click", () => saveConfig("save-hint"));
+    $("btn-save-system").addEventListener("click", () => saveConfig("save-system-hint"));
     $("btn-reload-config").addEventListener("click", () => loadConfig().catch((error) => toast(error.message, true)));
     $("cfg-cloud-instance").addEventListener("input", updateCloudTopics);
 
@@ -1326,7 +1653,9 @@
       form.append("firmware", input.files[0]);
       $("ota-status").textContent = "Caricamento…";
       try {
-        const headers = state.token ? { Authorization: "Bearer " + state.token } : {};
+        const headers = {};
+        if (state.token) headers.Authorization = "Bearer " + state.token;
+        if (state.systemToken) headers["X-Sheltr-System"] = state.systemToken;
         const response = await fetch("/api/system/ota", { method: "POST", body: form, headers });
         const data = await response.json();
         if (!response.ok || !data.ok) throw new Error(data.error || "Aggiornamento fallito");
@@ -1344,7 +1673,7 @@
     });
 
     $("btn-factory").addEventListener("click", async () => {
-      if (!confirm("Ripristinare la configurazione di fabbrica? Le schede configurate verranno perse.")) return;
+      if (!confirm("Ripristinare la configurazione di fabbrica? Schede e sequenze verranno perse.")) return;
       try {
         await api("/api/system/factory-reset", { method: "POST", body: { keepNetwork: true } });
         toast("Configurazione ripristinata, riavvio…");
@@ -1374,6 +1703,34 @@
       renderBoards();
       toast("Profilo aggiornato: ricordati di salvare");
     });
+
+    $("sequence-close").addEventListener("click", () => $("sequence-dialog").close());
+    $("sequence-add-step").addEventListener("click", () => {
+      const sequence = state.sequenceTarget;
+      if (!sequence) return;
+      const channels = allChannels();
+      if (!channels.length) { toast("Configura prima almeno una scheda", true); return; }
+      sequence.steps = sequence.steps || [];
+      sequence.steps.push({ channelId: channels[0].id, action: "", value: 0, delaySec: 0 });
+      renderSequenceSteps();
+    });
+    $("sequence-add-wait").addEventListener("click", () => {
+      const sequence = state.sequenceTarget;
+      if (!sequence) return;
+      sequence.steps = sequence.steps || [];
+      sequence.steps.push({ channelId: "", action: "", delaySec: 5 });
+      renderSequenceSteps();
+    });
+    $("sequence-save").addEventListener("click", () => {
+      const sequence = state.sequenceTarget;
+      if (sequence) {
+        sequence.name = $("sequence-name").value || sequence.id;
+        sequence.room = $("sequence-room").value || "Senza stanza";
+      }
+      $("sequence-dialog").close();
+      renderSequences();
+      toast("Sequenza aggiornata: ricordati di salvare");
+    });
   }
 
   // --------------------------------------------------------------------- boot
@@ -1383,7 +1740,7 @@
       const ready = await loadMeta();
       if (!ready) return;
       setView(state.view);
-      await Promise.all([loadStatus(false), loadSystem()]);
+      await loadStatus(false);
     } catch (error) {
       toast(error.message, true);
     }
@@ -1393,7 +1750,8 @@
   boot();
   setInterval(() => {
     if (state.view === "control" && !state.busy.size) loadStatus(false).catch(() => {});
-    if (state.view === "system") loadSystem().catch(() => {});
+    if (state.view === "system" && state.systemToken) loadSystem().catch(() => {});
+    loadMeta().catch(() => {});
   }, 15000);
 })();
 </script>
