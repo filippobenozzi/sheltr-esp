@@ -294,7 +294,7 @@ void handleLocalCommand(const String &topic, const String &payload) {
   if (tail.startsWith("sequence/") && tail.endsWith("/set")) {
     const String id = tail.substring(9, tail.length() - 4);
     String error;
-    if (!sequences::start(id, error)) {
+    if (!sequences::start(id, F("MQTT"), error)) {
       log_w("Sequenza '%s' non avviata: %s", id.c_str(), error.c_str());
     }
     return;

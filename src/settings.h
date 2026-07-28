@@ -47,13 +47,30 @@ struct SequenceStep {
 };
 
 // Pulsante virtuale: esegue una serie di passi, può essere assegnato a una stanza.
+// Può partire da interfaccia, MQTT, orario, ingresso GPIO o comando sul bus.
 struct Sequence {
   String id;
   String name;
   String room = "Senza stanza";
   bool favorite = false;
+  uint16_t busTrigger = 0;  // 0 = disattivato; N = frame 0xAA con numero N (es. AA01)
+  Profile schedule;         // orari di avvio (entry.time + entry.days)
   std::vector<SequenceStep> steps;
 };
+
+// Ingresso digitale: un contatto che avvia una sequenza.
+// I parametri hardware si impostano in Sistema, la sequenza si assegna dal Controllo.
+struct InputCfg {
+  bool enabled = false;
+  int8_t gpio = -1;
+  bool pullup = true;      // resistenza interna di pull-up
+  bool activeLow = true;   // contatto verso GND
+  uint16_t debounceMs = 60;
+  String name;
+  String sequenceId;
+};
+
+constexpr size_t INPUT_COUNT = 8;
 
 struct Board {
   String id;
@@ -110,6 +127,14 @@ struct NtpCfg {
   String tz = "CET-1CEST,M3.5.0,M10.5.0/3";  // Europa/Roma
 };
 
+// Orologio hardware DS3231 su I2C: tiene l'ora anche senza rete.
+struct RtcCfg {
+  bool enabled = false;
+  int8_t sda = 15;
+  int8_t scl = 16;
+  uint8_t address = 0x68;
+};
+
 struct MqttCfg {
   bool enabled = false;
   String host;
@@ -142,11 +167,13 @@ struct Config {
   BusCfg bus;
   NetworkCfg network;
   NtpCfg ntp;
+  RtcCfg rtc;
   MqttCfg mqtt;
   CloudCfg cloud;
   std::map<String, String> roomColors;
   std::vector<Board> boards;
   std::vector<Sequence> sequences;
+  std::vector<InputCfg> inputs;
   uint32_t revision = 0;
 };
 
@@ -176,6 +203,7 @@ Board *findBoard(const String &boardId);
 Board *findBoardByAddress(uint8_t address);
 Channel *findChannel(const String &entityId, Board **boardOut);
 Sequence *findSequence(const String &sequenceId);
+Sequence *findSequenceByBusTrigger(uint16_t trigger);
 std::vector<uint8_t> allAddresses();
 
 // Identità del dispositivo: UUID generato una sola volta, non modificabile.

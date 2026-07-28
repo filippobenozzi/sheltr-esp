@@ -62,7 +62,44 @@ curl -X POST http://sheltr.local/api/wifi/connect \
 
 ## Orologio
 
-I profili orari hanno bisogno dell'ora esatta: il firmware la prende via **NTP** appena la rete è attiva
-(`pool.ntp.org`, fuso `CET-1CEST,M3.5.0,M10.5.0/3` = Europa/Roma, con cambio ora automatico).
-Server e fuso si cambiano in *Configurazione → Ora e sicurezza*. Senza rete internet l'orologio non si
-sincronizza e i profili restano fermi: lo stato è visibile in *Sistema → Orologio*.
+I profili orari e gli avvii a orario delle sequenze hanno bisogno dell'ora esatta: il firmware la prende
+via **NTP** appena la rete è attiva (`pool.ntp.org`, fuso `CET-1CEST,M3.5.0,M10.5.0/3` = Europa/Roma, con
+cambio ora automatico). Server e fuso si cambiano in *Sistema → Ora e sicurezza*.
+
+### Orologio hardware DS3231
+
+Con un RTC l'ora resta corretta anche senza internet e dopo un blackout. Si configura in
+*Sistema → Orologio RTC (DS3231)*.
+
+Collegamento (I2C, default modificabile):
+
+| DS3231 | Scheda | Note |
+|---|---|---|
+| VCC | 3V3 | il modulo funziona anche a 3,3 V |
+| GND | GND | |
+| SDA | **GPIO15** | configurabile |
+| SCL | **GPIO16** | configurabile |
+
+Indirizzo I2C `0x68` (104 in decimale), fisso sul DS3231.
+
+Come lavora il firmware:
+
+1. **All'avvio** legge l'ora dall'RTC e la imposta come ora di sistema: i profili funzionano subito, anche
+   senza rete.
+2. **Quando NTP sincronizza**, riscrive l'ora sull'RTC (e poi la riallinea ogni ora), così il modulo resta
+   sempre aggiornato.
+3. Se l'RTC ha perso l'alimentazione, il flag interno lo segnala e l'ora viene ignorata finché non la
+   imposti.
+
+Dal pannello puoi anche forzare le due direzioni — **Leggi ora dall'RTC** e **Scrivi ora sull'RTC** — e
+impostare data e ora **manualmente**, utile in un impianto senza internet: il valore viene scritto sia nel
+sistema sia nel DS3231. Il pannello mostra stato del chip, ora conservata e temperatura interna.
+
+```bash
+TOKEN=$(curl -s -X POST http://sheltr.local/api/system/unlock \
+  -H 'Content-Type: application/json' -d '{"password":"Algo1962"}' | jq -r .token)
+
+# imposta manualmente data e ora
+curl -X POST http://sheltr.local/api/system/rtc -H "X-Sheltr-System: $TOKEN" \
+  -H 'Content-Type: application/json' -d '{"action":"set","time":"2026-07-26T21:35:00"}'
+```

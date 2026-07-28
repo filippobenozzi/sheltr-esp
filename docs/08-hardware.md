@@ -65,6 +65,15 @@ Consigli pratici:
 - cavo schermato twistato per tratte lunghe;
 - una sola coppia A/B per tutto il bus (topologia a margherita, niente stelle).
 
+## Orologio RTC e ingressi
+
+| Funzione | GPIO di fabbrica | Note |
+|---|---|---|
+| DS3231 SDA / SCL | 15 / 16 | I2C a 100 kHz, indirizzo `0x68` |
+| Ingressi digitali 1–8 | 1, 2, 21, 38, 39, 40, 41, 47 | pull-up interno, contatto verso GND |
+
+Tutti configurabili da *Sistema*. Evita GPIO 45 e 46 (pin di strapping) e 19/20 (USB nativo).
+
 ## Alimentazione
 
 - Alimenta la scheda dal connettore USB-C (5 V) oppure dai pin `VCC5V`/`GND` di P3.

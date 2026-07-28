@@ -7,13 +7,39 @@ namespace sequences {
 
 namespace {
 
-String g_runningId;
-size_t g_stepIndex = 0;
-uint32_t g_nextStepAt = 0;
-uint32_t g_startedAt = 0;
-String g_lastError;
-String g_lastFinishedId;
+struct Runner {
+  String id;
+  String source;
+  size_t stepIndex = 0;
+  uint32_t nextStepAt = 0;
+  uint32_t startedAt = 0;
+};
+
+Runner g_runners[MAX_CONCURRENT];
 uint32_t g_runCount = 0;
+String g_lastFinishedId;
+String g_lastError;
+
+Runner *findRunner(const String &id) {
+  for (Runner &runner : g_runners) {
+    if (runner.id == id) return &runner;
+  }
+  return nullptr;
+}
+
+Runner *freeRunner() {
+  for (Runner &runner : g_runners) {
+    if (!runner.id.length()) return &runner;
+  }
+  return nullptr;
+}
+
+void release(Runner &runner) {
+  runner.id = "";
+  runner.source = "";
+  runner.stepIndex = 0;
+  runner.nextStepAt = 0;
+}
 
 // Esegue l'azione di un passo sul canale indicato.
 bool runStep(const cfg::SequenceStep &step, String &error) {
@@ -58,9 +84,38 @@ bool runStep(const cfg::SequenceStep &step, String &error) {
   return true;
 }
 
+void advance(Runner &runner) {
+  const cfg::Sequence *sequence = cfg::findSequence(runner.id);
+  if (sequence == nullptr) {  // configurazione cambiata durante l'esecuzione
+    release(runner);
+    return;
+  }
+  if (runner.stepIndex >= sequence->steps.size()) {
+    log_i("Sequenza '%s' completata (%s)", sequence->name.c_str(), runner.source.c_str());
+    g_lastFinishedId = runner.id;
+    g_runCount++;
+    release(runner);
+    return;
+  }
+
+  const cfg::SequenceStep &step = sequence->steps[runner.stepIndex];
+  String error;
+  if (!runStep(step, error)) {
+    g_lastError = sequence->name + " · passo " + (runner.stepIndex + 1) + ": " + error;
+    log_w("Sequenza '%s' interrotta al passo %u: %s", sequence->name.c_str(),
+          static_cast<unsigned>(runner.stepIndex + 1), error.c_str());
+    g_lastFinishedId = runner.id;
+    release(runner);
+    return;
+  }
+
+  runner.stepIndex++;
+  runner.nextStepAt = millis() + static_cast<uint32_t>(step.delaySec) * 1000UL;
+}
+
 }  // namespace
 
-bool start(const String &sequenceId, String &error) {
+bool start(const String &sequenceId, const String &source, String &error) {
   const cfg::Sequence *sequence = cfg::findSequence(sequenceId);
   if (sequence == nullptr) {
     error = F("Sequenza non trovata");
@@ -70,72 +125,87 @@ bool start(const String &sequenceId, String &error) {
     error = F("La sequenza non ha passi");
     return false;
   }
-  if (g_runningId.length()) {
-    error = String(F("Sequenza già in esecuzione: ")) + g_runningId;
+  if (findRunner(sequenceId) != nullptr) {
+    error = F("Sequenza già in esecuzione");
     return false;
   }
-  g_runningId = sequenceId;
-  g_stepIndex = 0;
-  g_nextStepAt = millis();
-  g_startedAt = millis();
-  g_lastError = "";
-  log_i("Sequenza '%s' avviata (%u passi)", sequenceId.c_str(),
+  Runner *runner = freeRunner();
+  if (runner == nullptr) {
+    error = F("Troppe sequenze in esecuzione");
+    return false;
+  }
+
+  runner->id = sequenceId;
+  runner->source = source.length() ? source : String(F("interfaccia"));
+  runner->stepIndex = 0;
+  runner->nextStepAt = millis();
+  runner->startedAt = millis();
+  log_i("Sequenza '%s' avviata da %s (%u passi)", sequence->name.c_str(), runner->source.c_str(),
         static_cast<unsigned>(sequence->steps.size()));
   return true;
 }
 
-void stop() {
-  if (!g_runningId.length()) return;
-  log_w("Sequenza '%s' interrotta", g_runningId.c_str());
-  g_runningId = "";
-  g_stepIndex = 0;
+bool startByBusTrigger(uint16_t trigger, String &error) {
+  const cfg::Sequence *sequence = cfg::findSequenceByBusTrigger(trigger);
+  if (sequence == nullptr) {
+    error = String(F("Nessuna sequenza con trigger bus ")) + trigger;
+    return false;
+  }
+  char label[16];
+  snprintf(label, sizeof(label), "bus AA%02X", trigger);
+  return start(sequence->id, label, error);
+}
+
+void stop(const String &sequenceId) {
+  Runner *runner = findRunner(sequenceId);
+  if (runner == nullptr) return;
+  log_w("Sequenza '%s' interrotta", sequenceId.c_str());
+  release(*runner);
+}
+
+void stopAll() {
+  for (Runner &runner : g_runners) release(runner);
+}
+
+bool running(const String &sequenceId) { return findRunner(sequenceId) != nullptr; }
+
+bool anyRunning() {
+  for (const Runner &runner : g_runners) {
+    if (runner.id.length()) return true;
+  }
+  return false;
 }
 
 void loop() {
-  if (!g_runningId.length()) return;
-  if (static_cast<int32_t>(millis() - g_nextStepAt) < 0) return;
-
-  const cfg::Sequence *sequence = cfg::findSequence(g_runningId);
-  if (sequence == nullptr) {  // configurazione cambiata durante l'esecuzione
-    stop();
-    return;
+  const uint32_t now = millis();
+  for (Runner &runner : g_runners) {
+    if (!runner.id.length()) continue;
+    if (static_cast<int32_t>(now - runner.nextStepAt) < 0) continue;
+    advance(runner);
   }
-  if (g_stepIndex >= sequence->steps.size()) {
-    log_i("Sequenza '%s' completata", g_runningId.c_str());
-    g_lastFinishedId = g_runningId;
-    g_runCount++;
-    g_runningId = "";
-    g_stepIndex = 0;
-    return;
-  }
-
-  const cfg::SequenceStep &step = sequence->steps[g_stepIndex];
-  String error;
-  if (!runStep(step, error)) {
-    g_lastError = String(F("passo ")) + (g_stepIndex + 1) + ": " + error;
-    log_w("Sequenza '%s' fallita al passo %u: %s", g_runningId.c_str(),
-          static_cast<unsigned>(g_stepIndex + 1), error.c_str());
-    g_lastFinishedId = g_runningId;
-    g_runningId = "";
-    g_stepIndex = 0;
-    return;
-  }
-
-  g_stepIndex++;
-  g_nextStepAt = millis() + static_cast<uint32_t>(step.delaySec) * 1000UL;
 }
 
-bool running() { return g_runningId.length() > 0; }
-String runningId() { return g_runningId; }
-
 void statusJson(JsonObject out) {
-  out["running"] = running();
-  out["id"] = g_runningId;
-  out["step"] = static_cast<uint32_t>(g_stepIndex);
+  out["running"] = anyRunning();
   out["runCount"] = g_runCount;
   out["lastFinished"] = g_lastFinishedId;
   out["lastError"] = g_lastError;
-  if (running()) out["elapsedMs"] = millis() - g_startedAt;
+  out["slots"] = static_cast<uint32_t>(MAX_CONCURRENT);
+
+  JsonArray active = out["active"].to<JsonArray>();
+  for (const Runner &runner : g_runners) {
+    if (!runner.id.length()) continue;
+    JsonObject item = active.add<JsonObject>();
+    item["id"] = runner.id;
+    item["source"] = runner.source;
+    item["step"] = static_cast<uint32_t>(runner.stepIndex);
+    item["elapsedMs"] = millis() - runner.startedAt;
+    const cfg::Sequence *sequence = cfg::findSequence(runner.id);
+    if (sequence != nullptr) {
+      item["name"] = sequence->name;
+      item["steps"] = static_cast<uint32_t>(sequence->steps.size());
+    }
+  }
 }
 
 }  // namespace sequences

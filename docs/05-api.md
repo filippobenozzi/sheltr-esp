@@ -93,7 +93,8 @@ In caso di scheda muta la risposta è `502` con `{"ok": false, "error": "Nessuna
 | `/api/sequences` | GET | elenco sequenze con stato di esecuzione |
 | `/api/sequences/<id>/run` | POST | avvia la sequenza |
 | `/api/sequences/run` | POST | `{"id":"buonanotte"}` |
-| `/api/sequences/stop` | POST | interrompe la sequenza in corso |
+| `/api/sequences/stop` | POST | `{"id":"…"}` interrompe una sequenza, senza corpo le interrompe tutte |
+| `/api/inputs` | POST / PUT | `{"index":0,"sequenceId":"buonanotte"}` assegna la sequenza a un ingresso |
 
 `GET /api/status` include `sequencer` con lo stato del runner (`running`, `id`, `step`, `runCount`,
 `lastError`) e, per ogni stanza, l'array `sequences`.
@@ -132,6 +133,7 @@ ottenuto con la password della sezione Sistema e da passare nell'header `X-Shelt
 | `/api/system/factory-reset` | POST | `{"keepNetwork": true}` |
 | `/api/system/ota` | POST | upload multipart del firmware (`firmware=@file.bin`) |
 | `/api/frame` | POST | invio frame grezzo |
+| `/api/system/rtc` | POST | `{"action":"fromRtc"\|"toRtc"\|"set","time":"YYYY-MM-DDTHH:MM"}` |
 | `/api/wifi/scan` | GET | reti WiFi visibili (libera in modalità hotspot) |
 | `/api/wifi/connect` | POST | `{"ssid","password"}` (libera in modalità hotspot) |
 

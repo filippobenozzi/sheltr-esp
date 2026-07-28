@@ -154,12 +154,66 @@ Azioni disponibili per tipo di canale:
 
 La sequenza appare come **tile nella stanza assegnata** (con il pulsante ESEGUI) e, se il client MQTT è
 attivo, come **pulsante in Home Assistant**. L'esecuzione è a passi e non blocca il dispositivo: durante
-le attese interfaccia, MQTT e polling continuano a funzionare. Una sola sequenza per volta può essere in
-esecuzione.
+le attese interfaccia, MQTT e polling continuano a funzionare.
+
+Fino a **8 sequenze possono girare contemporaneamente**, ognuna con il proprio passo e il proprio timer:
+se due partono nello stesso minuto proseguono in parallelo, senza aspettarsi. Sul bus i comandi restano
+comunque serializzati, quindi non si accavallano mai due frame. La stessa sequenza non può essere avviata
+due volte finché è in corso.
+
+### Come si avvia una sequenza
+
+| Sorgente | Come |
+|---|---|
+| Interfaccia | pulsante ESEGUI sulla tile o in *Configurazione → Sequencer* |
+| API | `POST /api/sequences/<id>/run` |
+| Home Assistant | pulsante creato dalla discovery (`<base>/sequence/<id>/set` ← `RUN`) |
+| **Orario** | uno o più orari di avvio con i giorni della settimana (`schedule`) |
+| **Ingresso digitale** | uno degli 8 contatti configurati (vedi sotto) |
+| **Bus** | comando `AAnn` ricevuto dalle pulsantiere (vedi sotto) |
+
+### Avvio a orario
+
+Nell'editor della sequenza, *Avvio automatico* → uno o più orari con i giorni attivi:
+
+```json
+"schedule": { "enabled": true, "entries": [ { "time": "23:30", "days": [1,2,3,4,5] } ] }
+```
+
+Ogni sequenza ha solo l'ora di avvio: la durata dipende dalle attese dei suoi passi. Orari sovrapposti tra
+sequenze diverse sono ammessi.
+
+### Avvio dal bus (`AAnn`)
+
+Nel campo **Comando bus** si assegna un numero (1–255). Il gateway ascolta il bus quando è a riposo e
+avvia la sequenza quando riceve:
+
+- un **frame protocollo** con comando `0xAA` e il numero nel primo byte dati
+  (`49 <addr> AA 01 00 … 46` → scenario 1);
+- oppure il **testo ASCII** `AA01` (due cifre esadecimali dopo `AA`).
+
+Lo stato *Sistema* riporta quanti comandi scenario sono arrivati e qual è stato l'ultimo.
 
 ```bash
 # avvio manuale
 curl -X POST http://sheltr.local/api/sequences/buonanotte/run
+```
+
+## Ingressi digitali
+
+Otto contatti fisici possono avviare una sequenza.
+
+- In *Sistema → Ingressi digitali* si scelgono **GPIO, pull-up, verso del contatto e antirimbalzo**.
+  I GPIO predefiniti sono `1, 2, 21, 38, 39, 40, 41, 47`, tutti liberi sui connettori della scheda.
+- In *Controllo → Ingressi* si assegna a ogni ingresso **quale sequenza avviare**, con una tendina.
+
+Il default è contatto verso GND con pull-up interno: basta un pulsante tra il GPIO e la massa.
+L'avvio avviene sul fronte di chiusura, con antirimbalzo configurabile (60 ms di fabbrica).
+
+```bash
+curl -X POST http://sheltr.local/api/inputs \
+  -H 'Content-Type: application/json' \
+  -d '{"index":0,"sequenceId":"buonanotte"}'
 ```
 
 ## Bus seriale

@@ -24,6 +24,8 @@ class SheltrBus {
   };
 
   using Validator = std::function<bool(const protocol::Frame &)>;
+  // Comando di scenario ricevuto spontaneamente dal bus (0xAA + numero, es. AA01).
+  using TriggerHandler = std::function<void(uint16_t)>;
 
   void begin(int8_t rxPin, int8_t txPin, int8_t dePin, uint32_t baud, uint32_t timeoutMs);
   void reconfigure(int8_t rxPin, int8_t txPin, int8_t dePin, uint32_t baud, uint32_t timeoutMs);
@@ -37,6 +39,14 @@ class SheltrBus {
 
   // Polling 0x40 di una scheda.
   Result poll(uint8_t address);
+
+  // Ascolta il bus quando è a riposo: riconosce i comandi di scenario `AAnn`
+  // inviati spontaneamente dalle pulsantiere (frame protocollo con comando 0xAA
+  // oppure testo ASCII "AA01").
+  void listen();
+  void onTrigger(TriggerHandler handler) { trigger_ = handler; }
+  uint32_t triggerCount() const { return triggers_; }
+  uint16_t lastTrigger() const { return lastTrigger_; }
 
   uint32_t sentCount() const { return sent_; }
   uint32_t okCount() const { return ok_; }
@@ -62,6 +72,13 @@ class SheltrBus {
   uint32_t ok_ = 0;
   uint32_t errors_ = 0;
   String lastError_;
+
+  TriggerHandler trigger_ = nullptr;
+  uint8_t listenBuffer_[64] = {0};
+  size_t listenUsed_ = 0;
+  uint32_t listenLastByteAt_ = 0;
+  uint32_t triggers_ = 0;
+  uint16_t lastTrigger_ = 0;
 };
 
 extern SheltrBus Bus;

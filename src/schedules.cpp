@@ -5,6 +5,7 @@
 #include <map>
 
 #include "devices.h"
+#include "sequences.h"
 #include "settings.h"
 
 namespace schedules {
@@ -85,6 +86,30 @@ void thermostatTarget(const cfg::Profile &profile, int nowMinute, int weekday, f
   }
 }
 
+// Orari di avvio delle sequenze: ognuna parte per conto suo, anche se più
+// sequenze scattano nello stesso minuto.
+void applySequenceSchedules(int nowMinute, int weekday, uint32_t minuteStamp) {
+  for (const cfg::Sequence &sequence : cfg::config().sequences) {
+    if (!sequence.schedule.enabled) continue;
+    for (size_t index = 0; index < sequence.schedule.entries.size(); index++) {
+      const cfg::ProfileEntry &entry = sequence.schedule.entries[index];
+      if (!dayEnabled(entry.days, weekday)) continue;
+      if (minuteOfDay(entry.time) != nowMinute) continue;
+      const String key = String("seq:") + sequence.id + "#" + index;
+      auto found = g_lastSwitchRun.find(key);
+      if (found != g_lastSwitchRun.end() && found->second == minuteStamp) continue;
+      g_lastSwitchRun[key] = minuteStamp;
+
+      String error;
+      if (sequences::start(sequence.id, F("orario"), error)) {
+        g_applied++;
+      } else {
+        log_w("Sequenza %s da orario non avviata: %s", sequence.name.c_str(), error.c_str());
+      }
+    }
+  }
+}
+
 void applyThermostatProfiles(int nowMinute, int weekday) {
   for (const cfg::Board &board : cfg::config().boards) {
     if (board.kind != "thermostat") continue;
@@ -126,6 +151,7 @@ void loop() {
   const uint32_t minuteStamp = static_cast<uint32_t>(rawTime / 60);
 
   applySwitchProfiles(nowMinute, weekday, minuteStamp);
+  applySequenceSchedules(nowMinute, weekday, minuteStamp);
   applyThermostatProfiles(nowMinute, weekday);
   g_lastRunAt = now;
 }

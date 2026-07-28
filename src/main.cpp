@@ -3,9 +3,11 @@
 #include "board_pins.h"
 #include "bus.h"
 #include "devices.h"
+#include "inputs.h"
 #include "metrics.h"
 #include "mqtt_bridge.h"
 #include "net_manager.h"
+#include "rtc.h"
 #include "schedules.h"
 #include "sequences.h"
 #include "settings.h"
@@ -25,6 +27,17 @@ void setup() {
                 cfg::config().device.id.c_str());
 
   devices::begin();
+  rtc::begin();
+  inputs::begin();
+
+  // Comandi di scenario inviati spontaneamente sul bus (AA01, AA02, …).
+  Bus.onTrigger([](uint16_t trigger) {
+    String error;
+    if (!sequences::startByBusTrigger(trigger, error)) {
+      log_w("Trigger bus AA%02X ignorato: %s", trigger, error.c_str());
+    }
+  });
+
   net::begin();
   webserver::begin();
   mqtt::begin();
@@ -39,8 +52,11 @@ void loop() {
   webserver::loop();
   mqtt::loop();
   devices::loop();
+  inputs::loop();
+  Bus.listen();
   schedules::loop();
   sequences::loop();
+  rtc::loop();
 
   metrics::sample(micros() - startedAt);
   delay(2);  // lascia girare il task idle (watchdog) e le attività di rete

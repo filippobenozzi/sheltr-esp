@@ -123,6 +123,14 @@ void applyDefaults(Config &target, bool keepNetwork) {
   // Nessuna scheda predefinita: l'impianto si configura dall'interfaccia.
   target.boards.clear();
   target.sequences.clear();
+
+  // Gli 8 ingressi digitali esistono sempre, disattivati e sui GPIO liberi del connettore.
+  const int8_t inputPins[INPUT_COUNT] = {1, 2, 21, 38, 39, 40, 41, 47};
+  target.inputs.assign(INPUT_COUNT, InputCfg());
+  for (size_t i = 0; i < INPUT_COUNT; i++) {
+    target.inputs[i].gpio = inputPins[i];
+    target.inputs[i].name = String("Ingresso ") + (i + 1);
+  }
 }
 
 void parseProfile(JsonVariantConst raw, const String &kind, Profile &profile) {
@@ -251,6 +259,8 @@ void parseSequences(JsonArrayConst input, std::vector<Sequence> &sequences) {
     sequence.name = toText(item["name"], sequence.id);
     sequence.room = toText(item["room"], "Senza stanza");
     sequence.favorite = toBool(item["favorite"], false);
+    sequence.busTrigger = constrain(toInt(item["busTrigger"], 0), 0, 255);
+    parseProfile(item["schedule"], "light", sequence.schedule);  // orari di avvio
 
     JsonArrayConst steps = item["steps"].as<JsonArrayConst>();
     if (!steps.isNull()) {
@@ -284,6 +294,15 @@ void sequenceToJson(const Sequence &sequence, JsonObject out) {
   out["name"] = sequence.name;
   out["room"] = sequence.room;
   out["favorite"] = sequence.favorite;
+  out["busTrigger"] = sequence.busTrigger;
+  JsonObject schedule = out["schedule"].to<JsonObject>();
+  schedule["enabled"] = sequence.schedule.enabled;
+  JsonArray entries = schedule["entries"].to<JsonArray>();
+  for (const ProfileEntry &entry : sequence.schedule.entries) {
+    JsonObject item = entries.add<JsonObject>();
+    item["time"] = entry.time;
+    daysToJson(entry.days, item["days"].to<JsonArray>());
+  }
   JsonArray steps = out["steps"].to<JsonArray>();
   for (const SequenceStep &step : sequence.steps) {
     JsonObject item = steps.add<JsonObject>();
@@ -292,6 +311,41 @@ void sequenceToJson(const Sequence &sequence, JsonObject out) {
     if (step.hasValue) item["value"] = step.value;
     if (step.mode.length()) item["mode"] = step.mode;
     item["delaySec"] = step.delaySec;
+  }
+}
+
+void parseInputs(JsonArrayConst input, std::vector<InputCfg> &inputs) {
+  // Gli 8 ingressi esistono sempre: il JSON aggiorna solo quelli presenti.
+  const int8_t defaults[INPUT_COUNT] = {1, 2, 21, 38, 39, 40, 41, 47};
+  if (inputs.size() != INPUT_COUNT) {
+    inputs.assign(INPUT_COUNT, InputCfg());
+    for (size_t i = 0; i < INPUT_COUNT; i++) {
+      inputs[i].gpio = defaults[i];
+      inputs[i].name = String("Ingresso ") + (i + 1);
+    }
+  }
+  if (input.isNull()) return;
+
+  size_t index = 0;
+  for (JsonVariantConst raw : input) {
+    if (index >= INPUT_COUNT) break;
+    if (!raw.is<JsonObjectConst>()) {
+      index++;
+      continue;
+    }
+    JsonObjectConst item = raw.as<JsonObjectConst>();
+    InputCfg &target = inputs[index];
+    target.enabled = toBool(item["enabled"], target.enabled);
+    target.gpio = constrain(toInt(item["gpio"], target.gpio), -1, 48);
+    target.pullup = toBool(item["pullup"], target.pullup);
+    target.activeLow = toBool(item["activeLow"], target.activeLow);
+    target.debounceMs = constrain(toInt(item["debounceMs"], target.debounceMs), 5, 2000);
+    target.name = toText(item["name"], target.name.length() ? target.name
+                                                            : String("Ingresso ") + (index + 1));
+    if (item["sequenceId"].is<const char *>()) {
+      target.sequenceId = toText(item["sequenceId"], "");
+    }
+    index++;
   }
 }
 
@@ -383,6 +437,14 @@ Board *findBoardByAddress(uint8_t address) {
 Sequence *findSequence(const String &sequenceId) {
   for (Sequence &sequence : g_config.sequences) {
     if (sequence.id == sequenceId) return &sequence;
+  }
+  return nullptr;
+}
+
+Sequence *findSequenceByBusTrigger(uint16_t trigger) {
+  if (trigger == 0) return nullptr;
+  for (Sequence &sequence : g_config.sequences) {
+    if (sequence.busTrigger == trigger) return &sequence;
   }
   return nullptr;
 }
@@ -503,6 +565,14 @@ bool applyJson(JsonObjectConst input, String &error) {
     next.ntp.tz = toText(ntp["tz"], next.ntp.tz);
   }
 
+  if (input["rtc"].is<JsonObjectConst>()) {
+    JsonObjectConst rtc = input["rtc"];
+    next.rtc.enabled = toBool(rtc["enabled"], next.rtc.enabled);
+    next.rtc.sda = constrain(toInt(rtc["sda"], next.rtc.sda), -1, 48);
+    next.rtc.scl = constrain(toInt(rtc["scl"], next.rtc.scl), -1, 48);
+    next.rtc.address = constrain(toInt(rtc["address"], next.rtc.address), 8, 119);
+  }
+
   if (input["mqtt"].is<JsonObjectConst>()) {
     JsonObjectConst mqtt = input["mqtt"];
     next.mqtt.enabled = toBool(mqtt["enabled"], next.mqtt.enabled);
@@ -565,6 +635,8 @@ bool applyJson(JsonObjectConst input, String &error) {
     parseSequences(input["sequences"].as<JsonArrayConst>(), next.sequences);
   }
 
+  parseInputs(input["inputs"].as<JsonArrayConst>(), next.inputs);
+
   next.revision = g_config.revision + 1;
   g_config = next;
   return true;
@@ -614,6 +686,26 @@ void toJson(JsonObject out, bool includeSecrets) {
   ntp["enabled"] = current.ntp.enabled;
   ntp["server"] = current.ntp.server;
   ntp["tz"] = current.ntp.tz;
+
+  JsonObject rtc = out["rtc"].to<JsonObject>();
+  rtc["enabled"] = current.rtc.enabled;
+  rtc["sda"] = current.rtc.sda;
+  rtc["scl"] = current.rtc.scl;
+  rtc["address"] = current.rtc.address;
+
+  JsonArray inputs = out["inputs"].to<JsonArray>();
+  for (size_t i = 0; i < current.inputs.size(); i++) {
+    const InputCfg &item = current.inputs[i];
+    JsonObject entry = inputs.add<JsonObject>();
+    entry["index"] = static_cast<uint32_t>(i);
+    entry["enabled"] = item.enabled;
+    entry["gpio"] = item.gpio;
+    entry["pullup"] = item.pullup;
+    entry["activeLow"] = item.activeLow;
+    entry["debounceMs"] = item.debounceMs;
+    entry["name"] = item.name;
+    entry["sequenceId"] = item.sequenceId;
+  }
 
   JsonObject mqtt = out["mqtt"].to<JsonObject>();
   mqtt["enabled"] = current.mqtt.enabled;

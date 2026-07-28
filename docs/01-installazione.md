@@ -44,6 +44,15 @@ Dall'interfaccia web: **Sistema → Aggiornamento firmware**, seleziona `sheltr-
 (**non** il file `merged`) e premi *Aggiorna*. Il dispositivo scrive la partizione OTA inattiva e si
 riavvia; la configurazione salvata resta intatta.
 
+> **Nessuna sequenza di tasti**: BOOT+RST serve solo al flash da seriale. L'aggiornamento OTA passa dalla
+> rete e non tocca la modalità download. La pagina mostra la **barra di avanzamento**, poi «scrittura
+> della flash», quindi attende il riavvio e **si ricarica da sola** sulla nuova versione.
+
+Se invece stai flashando **da seriale** e vuoi evitare la sequenza manuale a ogni upload, l'unica strada è
+cablare le due linee di controllo del convertitore USB-seriale: **DTR → IO0** e **RTS → RST**. Con quelle
+collegate, `esptool` e la pagina di flash mettono la scheda in download mode da sole. Senza, la sequenza va
+fatta a mano perché la T-ETH-Lite non ha il circuito di auto-reset a bordo.
+
 Da riga di comando:
 
 ```bash

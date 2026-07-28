@@ -22,7 +22,11 @@ Niente Raspberry, niente server: tutto il protocollo è implementato a livello f
   palette pastello e tile per luci / dimmer / tapparelle / termostati; il dettaglio dei dispositivi si
   apre entrando nella stanza.
 - **Sequencer**: pulsanti virtuali che eseguono una serie di azioni con attese intermedie, assegnabili a
-  una stanza ed esposti anche a Home Assistant.
+  una stanza ed esposti anche a Home Assistant. Fino a 8 sequenze in parallelo, avviabili da interfaccia,
+  API, MQTT, **orario**, **ingresso digitale** o **comando `AAnn` sul bus**.
+- **8 ingressi digitali** configurabili (GPIO, pull-up, verso del contatto, antirimbalzo) da assegnare a
+  una sequenza direttamente dal controllo.
+- **Orologio RTC DS3231** opzionale: ora corretta anche senza rete, riallineata da NTP quando c'è.
 - **API HTTP compatibili con il portale**: le stesse rotte `/api/instances/<id>/…` usate da
   [sheltr-homeassistant](https://github.com/filippobenozzi/sheltr-homeassistant), quindi
   l'integrazione Home Assistant funziona puntando direttamente al dispositivo.
@@ -81,6 +85,8 @@ GitHub Actions e ripubblica la pagina di flash.
 | W5500 (SCLK/MISO/MOSI/CS/INT/RST) | 10 / 11 / 12 / 9 / 13 / 14 |
 | Bus Sheltr TX / RX (default) | 17 / 18 |
 | DE/RE RS485 (opzionale) | configurabile |
+| RTC DS3231 SDA / SCL (default) | 15 / 16 |
+| Ingressi digitali 1–8 (default) | 1, 2, 21, 38, 39, 40, 41, 47 |
 | Slot microSD (non usato dal firmware) | 5 / 6 / 7 / 42 |
 
 ## Licenza

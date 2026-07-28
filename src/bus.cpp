@@ -146,6 +146,65 @@ SheltrBus::Result SheltrBus::sendRaw(const uint8_t *raw, bool waitResponse, Vali
   return transact(raw, waitResponse, validator);
 }
 
+void SheltrBus::listen() {
+  if (serial_ == nullptr || trigger_ == nullptr) return;
+  // Solo quando il bus è libero: durante una transazione i byte appartengono alla risposta.
+  if (mutex_ != nullptr && xSemaphoreTake(mutex_, 0) != pdTRUE) return;
+
+  const uint32_t now = millis();
+  while (serial_->available() > 0) {
+    const int value = serial_->read();
+    if (value < 0) break;
+    if (listenUsed_ >= sizeof(listenBuffer_)) {
+      memmove(listenBuffer_, listenBuffer_ + 16, listenUsed_ - 16);
+      listenUsed_ -= 16;
+    }
+    listenBuffer_[listenUsed_++] = static_cast<uint8_t>(value);
+    listenLastByteAt_ = now;
+  }
+
+  if (listenUsed_ == 0) {
+    if (mutex_ != nullptr) xSemaphoreGive(mutex_);
+    return;
+  }
+
+  uint16_t trigger = 0;
+
+  // 1) frame protocollo con comando 0xAA: il numero dello scenario è in G1.
+  uint8_t candidate[protocol::FRAME_LEN];
+  if (protocol::extractBinary(listenBuffer_, listenUsed_, candidate)) {
+    protocol::Frame frame;
+    if (protocol::parse(candidate, frame) && frame.command == 0xAA) trigger = frame.g[0];
+    listenUsed_ = 0;
+  }
+
+  // 2) testo ASCII "AA01": due cifre esadecimali dopo AA.
+  if (trigger == 0 && listenUsed_ >= 4) {
+    for (size_t i = 0; i + 3 < listenUsed_; i++) {
+      if (toupper(listenBuffer_[i]) != 'A' || toupper(listenBuffer_[i + 1]) != 'A') continue;
+      const char high = listenBuffer_[i + 2];
+      const char low = listenBuffer_[i + 3];
+      if (!isxdigit(high) || !isxdigit(low)) continue;
+      char text[3] = {high, low, '\0'};
+      trigger = static_cast<uint16_t>(strtol(text, nullptr, 16));
+      listenUsed_ = 0;
+      break;
+    }
+  }
+
+  // Scarta i frammenti rimasti in sospeso da troppo tempo.
+  if (listenUsed_ > 0 && (now - listenLastByteAt_) > 500) listenUsed_ = 0;
+
+  if (mutex_ != nullptr) xSemaphoreGive(mutex_);
+
+  if (trigger > 0) {
+    triggers_++;
+    lastTrigger_ = trigger;
+    log_i("Comando scenario dal bus: AA%02X", trigger);
+    trigger_(trigger);
+  }
+}
+
 SheltrBus::Result SheltrBus::poll(uint8_t address) {
   return send(address, protocol::CMD_POLL, nullptr, 0, true,
               [address](const protocol::Frame &frame) {

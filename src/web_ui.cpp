@@ -8,10 +8,12 @@
 #include "bus.h"
 #include "devices.h"
 #include "generated/web_assets.h"
+#include "inputs.h"
 #include "json_utils.h"
 #include "metrics.h"
 #include "mqtt_bridge.h"
 #include "net_manager.h"
+#include "rtc.h"
 #include "schedules.h"
 #include "sequences.h"
 #include "settings.h"
@@ -201,6 +203,8 @@ String bodyString(JsonDocument &doc, const char *key, const String &fallback = S
 void applyRuntimeConfig() {
   const cfg::BusCfg &bus = cfg::config().bus;
   Bus.reconfigure(bus.rx, bus.tx, bus.de, bus.baud, bus.timeoutMs);
+  rtc::reconfigure();
+  inputs::reconfigure();
   mqtt::reload();
 }
 
@@ -234,6 +238,7 @@ void writeStatus(bool refresh, const std::vector<uint8_t> *addresses) {
   JsonObject root = doc.to<JsonObject>();
   devices::statusJson(root, refresh, addresses);
   sequences::statusJson(root["sequencer"].to<JsonObject>());
+  inputs::statusJson(root["inputs"].to<JsonArray>());
   if (refresh) mqtt::publishStates();
 
   g_server.sendHeader("Cache-Control", "no-store");
@@ -532,8 +537,10 @@ void sequencesJson(JsonObject out) {
     item["name"] = sequence.name;
     item["room"] = sequence.room;
     item["favorite"] = sequence.favorite;
+    item["busTrigger"] = sequence.busTrigger;
+    item["scheduleEnabled"] = sequence.schedule.enabled;
     item["steps"] = static_cast<uint32_t>(sequence.steps.size());
-    item["running"] = sequences::running() && sequences::runningId() == sequence.id;
+    item["running"] = sequences::running(sequence.id);
   }
   sequences::statusJson(out["runner"].to<JsonObject>());
 }
@@ -549,8 +556,8 @@ void handleSequences() {
 
 void runSequenceById(const String &id) {
   String error;
-  if (!sequences::start(id, error)) {
-    sendError(sequences::running() ? 409 : 404, error);
+  if (!sequences::start(id, F("interfaccia"), error)) {
+    sendError(sequences::running(id) ? 409 : 404, error);
     return;
   }
   JsonDocument doc(&SpiRamAllocator::instance());
@@ -579,8 +586,76 @@ void handleSequenceRun() {
 
 void handleSequenceStop() {
   if (!requireAuth()) return;
-  sequences::stop();
+  JsonDocument body(&SpiRamAllocator::instance());
+  if (!readBody(body)) return;
+  const String id = bodyString(body, "id", bodyString(body, "sequenceId"));
+  if (id.length()) {
+    sequences::stop(id);
+  } else {
+    sequences::stopAll();
+  }
   sendOk();
+}
+
+// Assegnazione della sequenza a un ingresso: si fa dal Controllo, quindi non
+// richiede la password di Sistema (i parametri elettrici sì).
+void handleInputAssign() {
+  if (!requireAuth()) return;
+  JsonDocument body(&SpiRamAllocator::instance());
+  if (!readBody(body)) return;
+  const int index = body["index"].is<int>() ? body["index"].as<int>() : -1;
+  if (index < 0 || index >= static_cast<int>(cfg::INPUT_COUNT) ||
+      index >= static_cast<int>(cfg::config().inputs.size())) {
+    sendError(400, F("Indice ingresso non valido (0..7)"));
+    return;
+  }
+
+  cfg::InputCfg &target = cfg::config().inputs[index];
+  const String sequenceId = bodyString(body, "sequenceId");
+  if (sequenceId.length() && cfg::findSequence(sequenceId) == nullptr) {
+    sendError(404, F("Sequenza non trovata"));
+    return;
+  }
+  target.sequenceId = sequenceId;
+  const String name = bodyString(body, "name");
+  if (name.length()) target.name = name;
+
+  if (!cfg::save()) {
+    sendError(500, F("Salvataggio ingresso fallito"));
+    return;
+  }
+  JsonDocument doc(&SpiRamAllocator::instance());
+  doc["ok"] = true;
+  doc["index"] = index;
+  doc["sequenceId"] = target.sequenceId;
+  sendJson(200, doc);
+}
+
+void handleRtcAction() {
+  if (!requireSystem()) return;
+  JsonDocument body(&SpiRamAllocator::instance());
+  if (!readBody(body)) return;
+  const String action = bodyString(body, "action", "fromRtc");
+  String error;
+  bool ok = false;
+
+  if (action == "fromRtc" || action == "read") {
+    ok = rtc::syncFromRtc(error);
+  } else if (action == "toRtc" || action == "write") {
+    ok = rtc::syncToRtc(error);
+  } else if (action == "set") {
+    ok = rtc::setDateTime(bodyString(body, "time"), error);
+  } else {
+    sendError(400, F("Azione non valida (fromRtc, toRtc, set)"));
+    return;
+  }
+
+  JsonDocument doc(&SpiRamAllocator::instance());
+  doc["ok"] = ok;
+  if (!ok) doc["error"] = error;
+  doc["time"] = devices::isoTimestamp();
+  rtc::statusJson(doc["rtc"].to<JsonObject>());
+  sendJson(ok ? 200 : 502, doc);
 }
 
 // -------------------------------------------------------------------- sistema
@@ -623,6 +698,10 @@ void systemJson(JsonObject out) {
 
   sequences::statusJson(out["sequencer"].to<JsonObject>());
   metrics::statusJson(out["performance"].to<JsonObject>());
+  rtc::statusJson(out["rtc"].to<JsonObject>());
+  inputs::statusJson(out["inputs"].to<JsonArray>());
+  out["bus"]["triggerCount"] = Bus.triggerCount();
+  out["bus"]["lastTrigger"] = Bus.lastTrigger();
 }
 
 void handleSystem() {
@@ -944,6 +1023,10 @@ void registerRoutes() {
   g_server.on("/api/rooms/color", HTTP_POST, handleRoomColor);
   g_server.on("/api/favorites", HTTP_POST, handleFavorite);
   g_server.on("/api/favorites", HTTP_PUT, handleFavorite);
+
+  g_server.on("/api/inputs", HTTP_POST, handleInputAssign);
+  g_server.on("/api/inputs", HTTP_PUT, handleInputAssign);
+  g_server.on("/api/system/rtc", HTTP_POST, handleRtcAction);
 
   g_server.on("/api/sequences", HTTP_GET, handleSequences);
   g_server.on("/api/sequences/run", HTTP_POST, handleSequenceRun);
