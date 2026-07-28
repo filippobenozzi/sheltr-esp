@@ -159,6 +159,8 @@ struct CloudCfg {
   String instanceId = "sheltr-esp";
   String instanceName = "Sheltr ESP";
   String payloadFormat = "frame_hex_space_crlf";
+  // URL del portale usato per l'associazione tramite codice (POST /api/provision/claim).
+  String portalUrl;
 };
 
 struct Config {

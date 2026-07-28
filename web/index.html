@@ -264,7 +264,18 @@
 
     <section class="panel">
       <h2>Sheltr Cloud</h2>
-      <div class="switch"><input id="cfg-cloud-enabled" type="checkbox" /><label for="cfg-cloud-enabled">Collega questo dispositivo a un portale Sheltr Cloud</label></div>
+      <p class="muted">Associa il dispositivo a un'istanza del portale con un <strong>codice</strong>: broker, credenziali e ID istanza vengono configurati in automatico.</p>
+      <div class="fields" style="margin-top:0.5rem">
+        <div class="field"><label for="cfg-cloud-portal">URL portale</label><input id="cfg-cloud-portal" type="text" placeholder="https://cloud.miodominio.it" autocomplete="off" /></div>
+        <div class="field"><label for="cfg-cloud-code">Codice di associazione</label><input id="cfg-cloud-code" type="text" placeholder="SHLTR-XXXXX-XXXXX-XXXXX" autocomplete="off" /></div>
+      </div>
+      <div class="row" style="margin-top:0.5rem">
+        <button class="primary" id="btn-cloud-claim">Abbina al portale</button>
+        <span class="muted" id="cloud-claim-hint"></span>
+      </div>
+      <details style="margin-top:1rem">
+        <summary class="muted">Configurazione manuale (avanzata)</summary>
+      <div class="switch" style="margin-top:0.75rem"><input id="cfg-cloud-enabled" type="checkbox" /><label for="cfg-cloud-enabled">Collega questo dispositivo a un portale Sheltr Cloud</label></div>
       <div class="fields" style="margin-top:0.75rem">
         <div class="field"><label for="cfg-cloud-host">Broker cloud</label><input id="cfg-cloud-host" type="text" /></div>
         <div class="field"><label for="cfg-cloud-port">Porta</label><input id="cfg-cloud-port" type="number" min="1" max="65535" /></div>
@@ -281,6 +292,7 @@
           </select>
         </div>
       </div>
+      </details>
       <p class="muted">Topic usati: <span class="mono" id="cfg-cloud-topics"></span></p>
     </section>
 
@@ -1536,6 +1548,7 @@
     $("cfg-cloud-instance").value = config.cloud.instanceId || "";
     $("cfg-cloud-instance-name").value = config.cloud.instanceName || "";
     $("cfg-cloud-format").value = config.cloud.payloadFormat || "frame_hex_space_crlf";
+    if (!$("cfg-cloud-portal").value) $("cfg-cloud-portal").value = config.cloud.portalUrl || "";
     updateCloudTopics();
 
     // sezione Sistema
@@ -1791,6 +1804,32 @@
       await loadStatus(false);
     } catch (error) {
       $(hintId).textContent = "";
+      toast(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
+  async function claimCloud() {
+    const button = $("btn-cloud-claim");
+    const hint = $("cloud-claim-hint");
+    const portalUrl = $("cfg-cloud-portal").value.trim();
+    const code = $("cfg-cloud-code").value.trim();
+    if (!portalUrl || !code) {
+      toast("Inserisci URL portale e codice di associazione", true);
+      return;
+    }
+    button.disabled = true;
+    hint.textContent = "Associazione in corso…";
+    try {
+      const data = await api("/api/cloud/claim", { method: "POST", body: { portalUrl, code } });
+      hint.textContent = "Associato a " + (data.instanceName || data.instanceId || "portale");
+      toast("Dispositivo associato al portale");
+      $("cfg-cloud-code").value = "";
+      await loadConfig();
+      await loadStatus(false);
+    } catch (error) {
+      hint.textContent = "";
       toast(error.message, true);
     } finally {
       button.disabled = false;
@@ -2055,6 +2094,7 @@
     $("btn-save-system").addEventListener("click", () => saveConfig("save-system-hint"));
     $("btn-reload-config").addEventListener("click", () => loadConfig().catch((error) => toast(error.message, true)));
     $("cfg-cloud-instance").addEventListener("input", updateCloudTopics);
+    $("btn-cloud-claim").addEventListener("click", claimCloud);
 
     $("btn-scan").addEventListener("click", async () => {
       $("btn-scan").disabled = true;

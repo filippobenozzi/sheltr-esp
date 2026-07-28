@@ -7,9 +7,22 @@ i frame del protocollo e restituisce le risposte delle schede.
 Il funzionamento locale resta indipendente: se il cloud non è raggiungibile, interfaccia web, MQTT e
 profili orari continuano a funzionare.
 
-## Configurazione sul dispositivo
+## Associazione rapida con codice (consigliato)
 
-*Configurazione → Sheltr Cloud*:
+Invece di inserire a mano broker, credenziali e ID istanza, usa un **codice di associazione**:
+
+1. Nel portale crea un'istanza di tipo **Sheltr ESP** e, in *Config → istanza → Associazione dispositivo*,
+   premi **Genera codice** (`SHLTR-XXXXX-XXXXX-XXXXX`).
+2. Sul dispositivo, *Configurazione → Sheltr Cloud*: inserisci l'**URL del portale** e il **codice**, poi
+   premi **Abbina al portale**.
+3. Il dispositivo chiama `POST <portale>/api/provision/claim`, riceve broker, credenziali MQTT e ID
+   istanza, si configura da solo e si collega. La sua configurazione viene importata dal portale.
+
+L'endpoint interno del dispositivo è `POST /api/cloud/claim` con `{portalUrl, code}`.
+
+## Configurazione manuale sul dispositivo
+
+*Configurazione → Sheltr Cloud → Configurazione manuale (avanzata)*:
 
 | Campo | Esempio | Note |
 |---|---|---|

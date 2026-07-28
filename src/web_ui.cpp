@@ -1,8 +1,10 @@
 #include "web_ui.h"
 
+#include <HTTPClient.h>
 #include <Update.h>
 #include <WebServer.h>
 #include <WiFi.h>
+#include <WiFiClientSecure.h>
 #include <uri/UriBraces.h>
 
 #include "bus.h"
@@ -475,6 +477,119 @@ void handlePutConfig() {
   doc["revision"] = cfg::config().revision;
   doc["restartRequired"] = restartRequired;
   sendJson(200, doc);
+}
+
+// Richiesta HTTP(S) verso il portale (redenzione codice). WebServer sincrono:
+// blocca il loop per la durata della chiamata (azione una tantum in fase di setup).
+bool cloudHttpPost(const String &url, const String &body, int &statusOut, String &respOut) {
+  statusOut = 0;
+  respOut = "";
+  HTTPClient http;
+  WiFiClientSecure secureClient;
+  WiFiClient plainClient;
+  bool began = false;
+  if (url.startsWith("https://")) {
+    secureClient.setInsecure();  // portale self-hosted: certificato non verificato
+    began = http.begin(secureClient, url);
+  } else {
+    began = http.begin(plainClient, url);
+  }
+  if (!began) return false;
+  http.setConnectTimeout(12000);
+  http.setTimeout(12000);
+  http.addHeader("Content-Type", "application/json");
+  const int code = http.POST(body);
+  if (code <= 0) {
+    http.end();
+    return false;  // errore di rete/connessione/TLS
+  }
+  statusOut = code;
+  respOut = http.getString();
+  http.end();
+  return true;
+}
+
+// Associazione al portale tramite codice: il dispositivo redime il codice, riceve
+// broker, credenziali e ID istanza, si configura e si ricollega. Vedi il portale
+// POST /api/provision/claim.
+void handleCloudClaim() {
+  if (!requireAuth()) return;
+  JsonDocument body(&SpiRamAllocator::instance());
+  if (!readBody(body)) return;
+
+  String portalUrl = bodyString(body, "portalUrl", cfg::config().cloud.portalUrl);
+  String code = bodyString(body, "code");
+  portalUrl.trim();
+  code.trim();
+  while (portalUrl.endsWith("/")) portalUrl.remove(portalUrl.length() - 1);
+  if (!portalUrl.length() || !code.length()) {
+    sendError(400, F("Specifica l'URL del portale e il codice di associazione"));
+    return;
+  }
+  if (!portalUrl.startsWith("http://") && !portalUrl.startsWith("https://")) {
+    portalUrl = String("https://") + portalUrl;
+  }
+
+  JsonDocument reqDoc(&SpiRamAllocator::instance());
+  reqDoc["code"] = code;
+  JsonObject dev = reqDoc["device"].to<JsonObject>();
+  dev["type"] = "sheltr_esp";
+  dev["board"] = SHELTR_BOARD_NAME;
+  dev["firmware"] = SHELTR_FW_VERSION;
+  dev["mac"] = WiFi.macAddress();
+  String reqBody;
+  serializeJson(reqDoc, reqBody);
+
+  int status = 0;
+  String respBody;
+  if (!cloudHttpPost(portalUrl + "/api/provision/claim", reqBody, status, respBody)) {
+    sendError(502, F("Portale non raggiungibile"));
+    return;
+  }
+
+  JsonDocument resp(&SpiRamAllocator::instance());
+  if (deserializeJson(resp, respBody)) {
+    sendError(502, F("Risposta del portale non valida"));
+    return;
+  }
+  if (status != 200 || !resp["ok"].as<bool>()) {
+    const String err = resp["error"].is<const char *>() ? String(resp["error"].as<const char *>())
+                                                         : String(F("Associazione non riuscita"));
+    const int code = (status == 404 || status == 429) ? status : 502;
+    sendError(code, err);
+    return;
+  }
+
+  // Riusiamo applyJson per validare (slugify ID, vincoli porta, whitelist formato).
+  JsonObjectConst mqttObj = resp["mqtt"];
+  JsonDocument cfgDoc(&SpiRamAllocator::instance());
+  JsonObject cloud = cfgDoc["cloud"].to<JsonObject>();
+  cloud["enabled"] = true;
+  cloud["host"] = mqttObj["host"].as<String>();
+  cloud["port"] = mqttObj["port"].as<int>();
+  cloud["username"] = mqttObj["username"].as<String>();
+  cloud["password"] = mqttObj["password"].as<String>();
+  cloud["instanceId"] = resp["instanceId"].as<String>();
+  cloud["instanceName"] = resp["instanceName"].as<String>();
+  cloud["payloadFormat"] = resp["payloadFormat"].as<String>();
+  cloud["portalUrl"] = portalUrl;
+
+  String applyError;
+  if (!cfg::applyJson(cfgDoc.as<JsonObjectConst>(), applyError)) {
+    sendError(400, applyError);
+    return;
+  }
+  if (!cfg::save()) {
+    sendError(500, F("Salvataggio configurazione fallito"));
+    return;
+  }
+  mqtt::reload();
+
+  JsonDocument out(&SpiRamAllocator::instance());
+  out["ok"] = true;
+  out["instanceId"] = cfg::config().cloud.instanceId;
+  out["instanceName"] = cfg::config().cloud.instanceName;
+  sendJson(200, out);
 }
 
 void handleRoomColor() {
@@ -1011,6 +1126,7 @@ void registerRoutes() {
   g_server.on("/api/config", HTTP_GET, handleGetConfig);
   g_server.on("/api/config", HTTP_PUT, handlePutConfig);
   g_server.on("/api/config", HTTP_POST, handlePutConfig);
+  g_server.on("/api/cloud/claim", HTTP_POST, handleCloudClaim);
 
   g_server.on("/api/status", HTTP_GET, handleStatus);
   g_server.on("/api/poll", HTTP_POST, handlePoll);

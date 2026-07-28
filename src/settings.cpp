@@ -615,6 +615,7 @@ bool applyJson(JsonObjectConst input, String &error) {
         format == "frame_hex_space_crlf" || format == "frame_hex_compact_crlf") {
       next.cloud.payloadFormat = format;
     }
+    next.cloud.portalUrl = toText(cloud["portalUrl"], next.cloud.portalUrl);
   }
 
   if (input["roomColors"].is<JsonObjectConst>()) {
@@ -732,6 +733,7 @@ void toJson(JsonObject out, bool includeSecrets) {
   cloud["instanceId"] = current.cloud.instanceId;
   cloud["instanceName"] = current.cloud.instanceName;
   cloud["payloadFormat"] = current.cloud.payloadFormat;
+  cloud["portalUrl"] = current.cloud.portalUrl;
   cloud["configTopic"] = current.cloud.instanceId + "/config";
   cloud["commandTopic"] = current.cloud.instanceId + "/cmd";
   cloud["responseTopic"] = current.cloud.instanceId + "/pub";
