@@ -127,7 +127,7 @@ ottenuto con la password della sezione Sistema e da passare nell'header `X-Shelt
 | `/api/meta` | GET | identità del dispositivo, stato login e rete (pubblica) |
 | `/api/system/unlock` | POST | `{"password":"Algo1962"}` → `{token}` |
 | `/api/system/lock` | POST | invalida il token di sistema |
-| `/api/system` | GET | rete, MQTT, bus, memoria, uptime, orologio, filesystem |
+| `/api/system` | GET | rete, MQTT, bus, memoria, uptime, orologio, filesystem, `performance` |
 | `/api/system/restart` | POST | riavvio |
 | `/api/system/factory-reset` | POST | `{"keepNetwork": true}` |
 | `/api/system/ota` | POST | upload multipart del firmware (`firmware=@file.bin`) |

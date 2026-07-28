@@ -9,6 +9,7 @@
 #include "devices.h"
 #include "generated/web_assets.h"
 #include "json_utils.h"
+#include "metrics.h"
 #include "mqtt_bridge.h"
 #include "net_manager.h"
 #include "schedules.h"
@@ -621,6 +622,7 @@ void systemJson(JsonObject out) {
   profiles["lastRunAgoMs"] = schedules::lastRunAt() ? millis() - schedules::lastRunAt() : 0;
 
   sequences::statusJson(out["sequencer"].to<JsonObject>());
+  metrics::statusJson(out["performance"].to<JsonObject>());
 }
 
 void handleSystem() {

@@ -99,8 +99,33 @@
   .setpoint { display: flex; flex-direction: column; align-items: center; justify-content: center; min-width: 4rem; line-height: 1.1; }
   .setpoint span:first-child { font-size: 0.6rem; text-transform: uppercase; letter-spacing: 0.1em; color: var(--muted-foreground); }
   .setpoint span:last-child { font-size: 1.05rem; font-weight: 700; font-variant-numeric: tabular-nums; }
-  .pulse { animation: pulse 1.6s ease-in-out infinite; }
-  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.35; } }
+  /* Pallino "relè attivo" del termostato: stessi valori del portale Sheltr Cloud
+     (size-2.5, bg-blue-500, alone 3px rgba(59,130,246,0.25), animate-pulse). */
+  .dot-thermo { width: 0.625rem; height: 0.625rem; border-radius: 999px; background: #d4d4d4; flex-shrink: 0; }
+  .dot-thermo.active { background: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25); }
+  .pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+
+  /* Icone in stile lucide: tratto 2, estremità arrotondate, 1rem come size-4. */
+  .icon { width: 1rem; height: 1rem; display: block; }
+  button.icon-btn { display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem; }
+  .icon-muted { color: var(--muted-foreground); }
+  .icon-sky { color: var(--sky); }
+  .icon-star { color: #b8b8b8; }
+  .icon-star.active { color: #eab308; fill: #facc15; }
+  .spin { animation: spin 1s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  .swatches { display: flex; flex-wrap: wrap; gap: 0.4rem; }
+  .swatch { width: 1.75rem; height: 1.75rem; border-radius: 999px; border: 2px solid var(--border); padding: 0; cursor: pointer; }
+  .swatch.selected { outline: 2px solid var(--foreground); outline-offset: 2px; }
+  .room-color-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 0.75rem; border: 2px solid var(--border); padding: 0.6rem; margin-bottom: 0.6rem; }
+  .room-color-row p { margin: 0; font-weight: 600; min-width: 7rem; }
+
+  .bar { height: 0.6rem; background: var(--muted); border: 2px solid var(--border); overflow: hidden; }
+  .bar span { display: block; height: 100%; background: var(--primary); }
+  .spark { display: flex; align-items: flex-end; gap: 1px; height: 2.5rem; border: 2px solid var(--border); padding: 2px; background: var(--background); }
+  .spark i { flex: 1; background: var(--sky); min-height: 1px; }
 
   .rooms { display: grid; gap: 0.75rem; grid-template-columns: repeat(auto-fill, minmax(12rem, 1fr)); }
   .room-card { border: 2px solid var(--border); padding: 1rem; text-align: left; display: flex; flex-direction: column; gap: 0.35rem; min-height: 6rem; }
@@ -167,7 +192,7 @@
       <button data-view="config">Configurazione</button>
       <button data-view="system">Sistema</button>
     </div>
-    <button id="btn-refresh" title="Aggiorna stato dal bus">Aggiorna</button>
+    <button id="btn-refresh" class="icon-btn" title="Aggiorna stato dal bus"><span id="refresh-icon"></span>Aggiorna</button>
     <button id="btn-logout" class="hidden small">Esci</button>
   </div>
 </header>
@@ -207,6 +232,12 @@
       <h2>Schede</h2>
       <div id="boards"></div>
       <button id="btn-add-board">+ Aggiungi scheda</button>
+    </section>
+
+    <section class="panel">
+      <h2>Colori stanze</h2>
+      <p class="muted">Il colore scelto viene usato nelle schede delle stanze del controllo. Si applica subito, senza salvare.</p>
+      <div id="room-colors"></div>
     </section>
 
     <section class="panel">
@@ -278,6 +309,17 @@
         <div class="row" style="margin-top:0.75rem">
           <button id="btn-system-lock" class="small">Blocca sezione</button>
         </div>
+      </section>
+
+      <section class="panel">
+        <h2>Prestazioni</h2>
+        <p class="muted">Carico del task principale: quanto tempo il gateway passa a lavorare (bus, web, MQTT, profili) rispetto al tempo trascorso.</p>
+        <div class="row" style="align-items:center;gap:0.75rem">
+          <div class="bar" style="flex:1;min-width:12rem"><span id="cpu-bar" style="width:0%"></span></div>
+          <strong id="cpu-value" style="font-variant-numeric:tabular-nums">—</strong>
+        </div>
+        <div class="spark" id="cpu-spark" style="margin-top:0.6rem"></div>
+        <dl class="kv" id="cpu-kv" style="margin-top:0.75rem"></dl>
       </section>
 
       <section class="panel">
@@ -469,6 +511,37 @@
     return node;
   };
 
+  // Set di icone lucide (le stesse usate dal portale Sheltr Cloud), disegnate inline
+  // per non dipendere da risorse esterne: il gateway deve funzionare anche offline.
+  const ICONS = {
+    clock3: '<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16.5 12"/>',
+    star: '<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>',
+    refresh: '<path d="M21 12a9 9 0 0 0-9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"/><path d="M3 3v5h5"/><path d="M3 12a9 9 0 0 0 9 9 9.75 9.75 0 0 0 6.74-2.74L21 16"/><path d="M21 21v-5h-5"/>',
+    arrowLeft: '<path d="m12 19-7-7 7-7"/><path d="M19 12H5"/>',
+    play: '<polygon points="6 3 20 12 6 21 6 3"/>',
+  };
+
+  function icon(name, className) {
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    svg.setAttribute("class", "icon" + (className ? " " + className : ""));
+    svg.innerHTML = ICONS[name] || "";
+    return svg;
+  }
+
+  function iconButton(name, className, iconClass, title) {
+    const button = el("button", "icon-btn " + (className || ""));
+    button.appendChild(icon(name, iconClass));
+    if (title) button.title = title;
+    return button;
+  }
+
   function toast(message, isError) {
     const node = $("toast");
     node.textContent = message;
@@ -590,14 +663,14 @@
 
     const actions = el("div", "tile-actions");
     if (withProfile) {
-      const profile = el("button", "ghost small", "◷");
-      profile.title = "Profilo orario";
-      if (item.profile && item.profile.enabled) profile.style.color = "var(--sky)";
+      const enabled = item.profile && item.profile.enabled;
+      const profile = iconButton("clock3", "ghost", enabled ? "icon-sky" : "icon-muted",
+        enabled ? "Profilo orario attivo" : "Profilo orario");
       profile.addEventListener("click", () => openProfile(item));
       actions.appendChild(profile);
     }
-    const star = el("button", "ghost star" + (item.favorite ? " active" : ""), item.favorite ? "★" : "☆");
-    star.title = item.favorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti";
+    const star = iconButton("star", "ghost", "icon-star" + (item.favorite ? " active" : ""),
+      item.favorite ? "Rimuovi dai preferiti" : "Aggiungi ai preferiti");
     star.addEventListener("click", () => toggleFavorite(item.id, !item.favorite));
     actions.appendChild(star);
     head.appendChild(actions);
@@ -663,10 +736,13 @@
   function thermostatTile(item, showRoom) {
     const tile = el("div", "tile");
     const head = tileHead(item, showRoom);
-    const dot = el("span", "dot" + (item.isActive ? " on pulse" : ""));
+    const title = head.firstChild.firstChild;
+    title.style.display = "flex";
+    title.style.alignItems = "center";
+    title.style.gap = "0.375rem";
+    const dot = el("span", "dot-thermo" + (item.isActive ? " active pulse" : ""));
     dot.title = item.isActive ? "Relè attivo" : "Relè non attivo";
-    dot.style.marginRight = "0.35rem";
-    head.firstChild.firstChild.prepend(dot);
+    title.prepend(dot);
     tile.appendChild(head);
 
     const temp = el("div", "temp");
@@ -711,7 +787,9 @@
     tile.appendChild(el("div", "tile-sub", item.steps + (item.steps === 1 ? " passo" : " passi")));
     const running = state.status && state.status.sequencer && state.status.sequencer.running &&
       state.status.sequencer.id === item.id;
-    const run = el("button", "btn-sel small" + (running ? " active" : ""), running ? "IN CORSO…" : "ESEGUI");
+    const run = el("button", "btn-sel small icon-btn" + (running ? " active" : ""));
+    run.appendChild(icon("play"));
+    run.appendChild(el("span", null, running ? "IN CORSO…" : "ESEGUI"));
     run.disabled = running || state.busy.has(busyKey("sequence", item.id));
     run.addEventListener("click", () => command("sequence", item.id,
       "/api/sequences/" + encodeURIComponent(item.id) + "/run", {}, "Sequenza"));
@@ -763,7 +841,9 @@
       const room = rooms.find((item) => item.name === state.room);
       if (!room) { state.room = null; renderControl(); return; }
       const crumb = el("div", "crumb");
-      const back = el("button", "small", "← Stanze");
+      const back = el("button", "small icon-btn");
+      back.appendChild(icon("arrowLeft"));
+      back.appendChild(el("span", null, "Stanze"));
       back.addEventListener("click", () => { state.room = null; renderControl(); });
       crumb.appendChild(back);
       crumb.appendChild(el("h2", null, room.name));
@@ -1337,6 +1417,45 @@
 
     renderBoards();
     renderSequences();
+    renderRoomColors();
+  }
+
+  function renderRoomColors() {
+    const container = $("room-colors");
+    container.innerHTML = "";
+    const rooms = (state.status && state.status.rooms) || [];
+    const palette = (state.config && state.config.roomPalette) ||
+      (state.status && state.status.roomPalette) || [];
+    if (!rooms.length) {
+      container.appendChild(el("p", "muted", "Nessuna stanza configurata."));
+      return;
+    }
+    for (const room of rooms) {
+      const row = el("div", "room-color-row");
+      row.appendChild(el("p", null, room.name));
+      const swatches = el("div", "swatches");
+      for (const color of palette) {
+        const swatch = el("button", "swatch" + (room.color === color ? " selected" : ""));
+        swatch.style.background = color;
+        swatch.title = color;
+        swatch.setAttribute("aria-label", "Colore " + color + " per " + room.name);
+        swatch.addEventListener("click", () => saveRoomColor(room.name, color));
+        swatches.appendChild(swatch);
+      }
+      row.appendChild(swatches);
+      container.appendChild(row);
+    }
+  }
+
+  async function saveRoomColor(room, color) {
+    try {
+      await api("/api/rooms/color", { method: "PUT", body: { room, color } });
+      await loadStatus(false);
+      renderRoomColors();
+      toast("Colore di «" + room + "» aggiornato");
+    } catch (error) {
+      toast(error.message, true);
+    }
   }
 
   function updateCloudTopics() {
@@ -1464,6 +1583,8 @@
       kv.appendChild(el("dd", null, String(value ?? "")));
     }
 
+    renderPerformance(system.performance);
+
     const busKv = $("bus-kv");
     busKv.innerHTML = "";
     for (const [key, value] of [
@@ -1490,6 +1611,43 @@
       row.appendChild(el("td", "mono", board.poll ? "0b" + Number(board.poll.outputMask).toString(2).padStart(8, "0") : "—"));
       row.appendChild(el("td", "mono", board.poll ? Number(board.poll.temperature).toFixed(1) + " °C" : "—"));
       table.appendChild(row);
+    }
+  }
+
+  function renderPerformance(performance) {
+    if (!performance) return;
+    const usage = Number(performance.loopUsagePercent || 0);
+    $("cpu-bar").style.width = Math.min(100, usage) + "%";
+    $("cpu-value").textContent = usage.toFixed(1) + " %";
+
+    const spark = $("cpu-spark");
+    spark.innerHTML = "";
+    const history = performance.history || [];
+    const points = history.slice(-60);
+    for (const value of points) {
+      const bar = document.createElement("i");
+      bar.style.height = Math.max(2, Math.min(100, Number(value))) + "%";
+      bar.title = Number(value).toFixed(1) + " %";
+      spark.appendChild(bar);
+    }
+    if (!points.length) spark.appendChild(el("i", null, ""));
+
+    const kv = $("cpu-kv");
+    kv.innerHTML = "";
+    for (const [key, value] of [
+      ["Carico medio (1 min)", Number(performance.loopUsageAvgPercent || 0).toFixed(1) + " %"],
+      ["Picco dall'avvio", Number(performance.loopUsagePeakPercent || 0).toFixed(1) + " %"],
+      ["Frequenza CPU", performance.cpuFreqMhz + " MHz · " + performance.cores + " core"],
+      ["Cicli al secondo", performance.loopHz],
+      ["Durata media ciclo", (performance.loopAvgUs || 0) + " µs"],
+      ["Ciclo più lungo (1 s)", ((performance.loopMaxUs || 0) / 1000).toFixed(1) + " ms"],
+      ["Ciclo più lungo (sempre)", ((performance.loopMaxUsEver || 0) / 1000).toFixed(1) + " ms"],
+      ["Stack libero task", formatBytes(performance.taskStackFree)],
+      ["Heap minimo storico", formatBytes(performance.minFreeHeap)],
+      ["Blocco heap più grande", formatBytes(performance.heapLargestBlock)],
+    ]) {
+      kv.appendChild(el("dt", null, key));
+      kv.appendChild(el("dd", null, String(value)));
     }
   }
 
@@ -1548,14 +1706,18 @@
       button.addEventListener("click", () => setView(button.dataset.view));
     }
 
+    $("refresh-icon").appendChild(icon("refresh"));
     $("btn-refresh").addEventListener("click", async () => {
+      const glyph = $("refresh-icon").firstChild;
       $("btn-refresh").disabled = true;
+      glyph.classList.add("spin");
       try {
         await loadStatus(true);
         toast("Stato aggiornato dal bus");
       } catch (error) {
         toast(error.message, true);
       } finally {
+        glyph.classList.remove("spin");
         $("btn-refresh").disabled = false;
       }
     });

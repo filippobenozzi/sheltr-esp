@@ -36,6 +36,8 @@ Artefatti in `.pio/build/t-eth-lite-esp32s3/`:
 | `src/network.{h,cpp}` | Ethernet W5500, WiFi, hotspot + captive portal, mDNS, NTP |
 | `src/webserver.{h,cpp}` | server HTTP, API REST, autenticazione, OTA |
 | `src/mqtt_bridge.{h,cpp}` | client MQTT locale (discovery HA) e client Sheltr Cloud |
+| `src/sequences.{h,cpp}` | sequencer: esecuzione a passi con attese, senza bloccare il loop |
+| `src/metrics.{h,cpp}` | statistiche di carico del task principale |
 | `src/json_utils.h` | allocatore ArduinoJson su PSRAM |
 | `web/index.html` | interfaccia locale (file unico) |
 | `scripts/build_web.py` | comprime `web/index.html` e genera `src/generated/web_assets.h` |
@@ -47,6 +49,14 @@ Artefatti in `.pio/build/t-eth-lite-esp32s3/`:
 framework, e soprattutto un solo thread che tocca il bus seriale. Le transazioni sul bus durano
 100–300 ms e sono comunque serializzate da un mutex: un server asincrono aggiungerebbe complessità senza
 vantaggi misurabili su questo carico.
+
+### Statistiche di carico
+
+Il core Arduino compila FreeRTOS con `CONFIG_FREERTOS_GENERATE_RUN_TIME_STATS` disattivato, quindi
+`vTaskGetRunTimeStats()` e le percentuali per core non sono disponibili senza ricompilare il framework.
+`metrics.cpp` misura invece il tempo che il task principale passa a lavorare rispetto al tempo trascorso,
+su finestre da un secondo, con storico di 60 campioni: è la grandezza che conta per questo firmware,
+perché è una transazione lenta sul bus a rallentare interfaccia, MQTT e profili orari.
 
 ### Interfaccia web
 

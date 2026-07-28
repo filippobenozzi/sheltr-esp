@@ -3,6 +3,7 @@
 #include "board_pins.h"
 #include "bus.h"
 #include "devices.h"
+#include "metrics.h"
 #include "mqtt_bridge.h"
 #include "net_manager.h"
 #include "schedules.h"
@@ -32,11 +33,15 @@ void setup() {
 }
 
 void loop() {
+  const uint32_t startedAt = micros();
+
   net::loop();
   webserver::loop();
   mqtt::loop();
   devices::loop();
   schedules::loop();
   sequences::loop();
-  delay(2);
+
+  metrics::sample(micros() - startedAt);
+  delay(2);  // lascia girare il task idle (watchdog) e le attività di rete
 }

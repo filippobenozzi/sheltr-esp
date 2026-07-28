@@ -78,7 +78,10 @@ Esempio:
 ## Stanze e colori
 
 La **stanza** è un campo libero del canale: l'interfaccia raggruppa i dispositivi per stanza e assegna a
-ognuna un colore della palette pastello (la stessa di Sheltr Cloud). Il colore si può fissare con:
+ognuna un colore della palette pastello (la stessa di Sheltr Cloud).
+
+Il colore si cambia da *Configurazione → Colori stanze*: per ogni stanza compaiono i dieci campioni della
+palette e basta un clic per applicarlo (viene salvato subito, senza premere «Salva»). Da API:
 
 ```bash
 curl -X PUT http://sheltr.local/api/rooms/color \

@@ -15,6 +15,9 @@ All'avvio il firmware stampa versione, ID dispositivo, stato di rete e indirizzo
 
 `http://sheltr.local` → **Sistema** riassume tutto quello che serve per capire dov'è il problema:
 
+- **Prestazioni**: carico del task principale (percentuale di tempo speso a lavorare), media del minuto,
+  picco dall'avvio, grafico degli ultimi 60 secondi, cicli al secondo, durata media e massima del ciclo,
+  stack libero, heap minimo storico e blocco heap più grande;
 - stato di Ethernet, WiFi, hotspot e orologio;
 - stato dei due client MQTT con l'ultimo errore riportato;
 - statistiche del bus: frame inviati, risposte valide, errori, ultimo errore;
