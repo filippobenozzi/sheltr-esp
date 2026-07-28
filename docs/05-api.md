@@ -2,6 +2,10 @@
 
 Base URL: `http://sheltr.local` (oppure l'IP del dispositivo). Tutte le risposte sono JSON.
 
+> Negli esempi gli id delle schede sono scritti in forma breve (`board-1`) per leggibilità: sul
+> dispositivo sono UUID generati automaticamente, per esempio
+> `3f8a1c22-6d41-4b0e-9a77-1e2b3c4d5e6f-c1`.
+
 ## Autenticazione
 
 Se *Richiedi login* è disattivato (default) le API sono aperte sulla rete locale. Con il login attivo:

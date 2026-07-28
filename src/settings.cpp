@@ -194,8 +194,14 @@ void parseBoards(JsonArrayConst input, std::vector<Board> &boards) {
       board.kind = "light";
     }
     const uint8_t maxChannels = maxChannelsForKind(board.kind);
-    board.id = slugify(toText(item["id"], ""), String("board-") + index);
-    board.name = toText(item["name"], board.id);
+    // L'id è un UUID generato alla creazione della scheda: qui viene solo preservato
+    // (gli impianti già configurati mantengono il loro id storico) o creato se manca.
+    const String incomingId = cleanText(toText(item["id"], ""), "");
+    board.id = incomingId.length() ? slugify(incomingId, newUuid()) : newUuid();
+    for (const Board &existing : boards) {
+      if (existing.id == board.id) board.id = newUuid();  // niente id duplicati sul bus
+    }
+    board.name = toText(item["name"], String("Scheda ") + index);
     board.address = constrain(toInt(item["address"], index), 0, 254);
     board.channelStart = constrain(toInt(item["channelStart"], 1), 1, maxChannels);
     board.channelEnd = constrain(toInt(item["channelEnd"], maxChannels), board.channelStart,

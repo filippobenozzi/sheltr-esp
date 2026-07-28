@@ -1149,6 +1149,28 @@
     return field;
   }
 
+  function readOnlyField(label, value) {
+    const field = el("div", "field");
+    field.appendChild(el("label", null, label));
+    const input = document.createElement("input");
+    input.type = "text"; input.value = value || ""; input.disabled = true;
+    input.className = "mono";
+    field.appendChild(input);
+    return field;
+  }
+
+  // UUID v4. `crypto.randomUUID` non è disponibile su http://, getRandomValues sì.
+  function uuid() {
+    if (typeof crypto !== "undefined" && crypto.randomUUID) return crypto.randomUUID();
+    const bytes = new Uint8Array(16);
+    crypto.getRandomValues(bytes);
+    bytes[6] = (bytes[6] & 0x0f) | 0x40;
+    bytes[8] = (bytes[8] & 0x3f) | 0x80;
+    const hex = [...bytes].map((byte) => byte.toString(16).padStart(2, "0"));
+    return hex.slice(0, 4).join("") + "-" + hex.slice(4, 6).join("") + "-" +
+      hex.slice(6, 8).join("") + "-" + hex.slice(8, 10).join("") + "-" + hex.slice(10).join("");
+  }
+
   function inputCell(value, onChange) {
     const cell = document.createElement("td");
     const input = document.createElement("input");
@@ -1179,7 +1201,7 @@
 
       const fields = el("div", "fields");
       fields.appendChild(textField("Nome", board.name, (value) => { board.name = value; }));
-      fields.appendChild(textField("ID", board.id, (value) => { board.id = value; }));
+      fields.appendChild(readOnlyField("ID scheda (UUID)", board.id));
       fields.appendChild(selectField("Tipo",
         [["Luci", "light"], ["Tapparelle", "shutter"], ["Dimmer", "dimmer"], ["Termostato", "thermostat"]],
         board.kind, (value) => {
@@ -1586,7 +1608,7 @@
       state.config.boards = state.config.boards || [];
       const index = state.config.boards.length + 1;
       const board = {
-        id: "board-" + index,
+        id: uuid(),
         name: "Scheda " + index,
         kind: "light",
         address: index,
@@ -1603,7 +1625,7 @@
       if (!state.config) return;
       state.config.sequences = state.config.sequences || [];
       const index = state.config.sequences.length + 1;
-      const sequence = { id: "seq-" + index, name: "Sequenza " + index, room: "Senza stanza", favorite: false, steps: [] };
+      const sequence = { id: uuid(), name: "Sequenza " + index, room: "Senza stanza", favorite: false, steps: [] };
       state.config.sequences.push(sequence);
       renderSequences();
       openSequenceDialog(sequence);

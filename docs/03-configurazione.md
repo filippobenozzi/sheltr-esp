@@ -37,7 +37,7 @@ Una **scheda** rappresenta un modulo fisico sul bus:
 
 | Campo | Significato |
 |---|---|
-| `id` | identificatore stabile (`board-1`), usato per comporre gli id dei canali |
+| `id` | UUID generato alla creazione della scheda, non modificabile; è la base degli id dei canali |
 | `name` | nome mostrato nell'interfaccia e in Home Assistant |
 | `kind` | `light`, `shutter`, `dimmer`, `thermostat` |
 | `address` | indirizzo sul bus (0–254), quello impostato con i dip-switch |
@@ -47,8 +47,12 @@ Una **scheda** rappresenta un modulo fisico sul bus:
 Numero massimo di canali per tipo: **luci 8**, **tapparelle 4**, **dimmer 1**, **termostato 1** — gli
 stessi limiti del portale Sheltr Cloud.
 
-L'id di un canale è sempre `<board.id>-c<channel>` (esempio `board-1-c3`): è la chiave usata da API,
-MQTT e Home Assistant.
+L'id di un canale è sempre `<board.id>-c<channel>`: è la chiave usata da API, MQTT e Home Assistant.
+
+Gli id delle schede (come quelli delle sequenze) sono **UUID generati automaticamente** alla creazione e
+mostrati in sola lettura: restano stabili anche se rinomini la scheda o cambi indirizzo, così preferiti,
+sequenze ed entità Home Assistant non si rompono mai. Gli impianti configurati con firmware precedenti
+mantengono i loro id storici (`board-1`, …): non vengono riscritti.
 
 Esempio:
 
@@ -56,7 +60,7 @@ Esempio:
 {
   "boards": [
     {
-      "id": "luci-piano-terra",
+      "id": "3f8a1c22-6d41-4b0e-9a77-1e2b3c4d5e6f",
       "name": "Luci piano terra",
       "kind": "light",
       "address": 1,
