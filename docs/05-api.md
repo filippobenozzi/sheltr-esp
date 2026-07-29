@@ -45,9 +45,10 @@ Parametro opzionale `refresh=1`: interroga il bus prima di rispondere (polling `
       "color": "#d4e5f7",
       "lights": [
         { "id": "board-1-c1", "name": "Faretti", "room": "Cucina", "address": 1,
-          "channel": 1, "kind": "light", "isOn": true, "online": true }
+          "channel": 1, "kind": "light", "isOn": true, "online": true,
+          "favorite": true, "busActivityAgoMs": 1200 }
       ],
-      "dimmers": [], "shutters": [], "thermostats": []
+      "dimmers": [], "shutters": [], "thermostats": [], "sequences": [], "inputs": []
     }
   ],
   "boards": [
@@ -89,15 +90,17 @@ In caso di scheda muta la risposta è `502` con `{"ok": false, "error": "Nessuna
 
 | Rotta | Metodo | Descrizione |
 |---|---|---|
-| `/api/favorites` | POST / PUT | `{"id":"board-1-c1","favorite":true}` — vale anche per gli id delle sequenze |
+| `/api/favorites` | POST / PUT | `{"id":"board-1-c1","favorite":true}` — accetta anche id di sequenze e ingressi (`input-0`) |
 | `/api/sequences` | GET | elenco sequenze con stato di esecuzione |
 | `/api/sequences/<id>/run` | POST | avvia la sequenza |
 | `/api/sequences/run` | POST | `{"id":"buonanotte"}` |
 | `/api/sequences/stop` | POST | `{"id":"…"}` interrompe una sequenza, senza corpo le interrompe tutte |
-| `/api/inputs` | POST / PUT | `{"index":0,"sequenceId":"buonanotte"}` assegna la sequenza a un ingresso |
+| `/api/inputs` | POST / PUT | `{"index":0,"name":"…","room":"…","favorite":true,"sequenceId":"…"}` |
 
-`GET /api/status` include `sequencer` con lo stato del runner (`running`, `id`, `step`, `runCount`,
-`lastError`) e, per ogni stanza, l'array `sequences`.
+`GET /api/status` include `sequencer` con lo stato del runner (`running`, `runCount`, `active[]`,
+`lastError`), l'array `inputs` con lo stato dei contatti e, per ogni stanza, gli array `sequences` e
+`inputs`. Ogni canale riporta `busActivityAgoMs` (millisecondi dall'ultimo scambio sul bus) quando
+l'attività è recente: è il dato dietro il pallino verde dell'interfaccia.
 
 ## Configurazione
 

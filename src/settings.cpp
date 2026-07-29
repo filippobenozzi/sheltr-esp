@@ -342,6 +342,8 @@ void parseInputs(JsonArrayConst input, std::vector<InputCfg> &inputs) {
     target.debounceMs = constrain(toInt(item["debounceMs"], target.debounceMs), 5, 2000);
     target.name = toText(item["name"], target.name.length() ? target.name
                                                             : String("Ingresso ") + (index + 1));
+    target.room = toText(item["room"], target.room.length() ? target.room : String("Senza stanza"));
+    target.favorite = toBool(item["favorite"], target.favorite);
     if (item["sequenceId"].is<const char *>()) {
       target.sequenceId = toText(item["sequenceId"], "");
     }
@@ -705,6 +707,8 @@ void toJson(JsonObject out, bool includeSecrets) {
     entry["activeLow"] = item.activeLow;
     entry["debounceMs"] = item.debounceMs;
     entry["name"] = item.name;
+    entry["room"] = item.room;
+    entry["favorite"] = item.favorite;
     entry["sequenceId"] = item.sequenceId;
   }
 

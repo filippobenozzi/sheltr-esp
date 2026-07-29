@@ -205,7 +205,10 @@ Otto contatti fisici possono avviare una sequenza.
 
 - In *Sistema → Ingressi digitali* si scelgono **GPIO, pull-up, verso del contatto e antirimbalzo**.
   I GPIO predefiniti sono `1, 2, 21, 38, 39, 40, 41, 47`, tutti liberi sui connettori della scheda.
-- In *Controllo → Ingressi* si assegna a ogni ingresso **quale sequenza avviare**, con una tendina.
+- In *Configurazione → Ingressi* si assegnano **nome, stanza, preferito e sequenza da avviare**.
+
+Un ingresso abilitato compare nel controllo come tile della sua stanza (e tra i preferiti, se marcato):
+mostra lo stato del contatto, la sequenza collegata e il numero di attivazioni.
 
 Il default è contatto verso GND con pull-up interno: basta un pulsante tra il GPIO e la massa.
 L'avvio avviene sul fronte di chiusura, con antirimbalzo configurabile (60 ms di fabbrica).
@@ -213,8 +216,20 @@ L'avvio avviene sul fronte di chiusura, con antirimbalzo configurabile (60 ms di
 ```bash
 curl -X POST http://sheltr.local/api/inputs \
   -H 'Content-Type: application/json' \
-  -d '{"index":0,"sequenceId":"buonanotte"}'
+  -d '{"index":0,"name":"Pulsante ingresso","room":"Sala","favorite":true,"sequenceId":"buonanotte"}'
 ```
+
+## Indicatore di attività sul bus
+
+A destra del nome di ogni dispositivo compare un **pallino verde** mentre il canale sta scambiando
+comandi sul protocollo. Si accende quando:
+
+- il gateway invia un comando per quel canale (anche da MQTT, sequenza o profilo orario);
+- il polling `0x40` rileva che lo stato del canale è **cambiato** senza un nostro comando — tipicamente
+  qualcuno ha premuto un pulsante fisico sull'impianto.
+
+Il pallino resta visibile per pochi secondi e poi sparisce: serve a vedere a colpo d'occhio *chi* sta
+parlando sul bus. Nel controllo lo stato viene riletto ogni 4 secondi, così l'indicazione è tempestiva.
 
 ## Bus seriale
 

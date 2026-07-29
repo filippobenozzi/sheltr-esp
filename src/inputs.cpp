@@ -96,7 +96,11 @@ void statusJson(JsonArray out) {
     const InputState &state = g_states[i];
     JsonObject entry = out.add<JsonObject>();
     entry["index"] = static_cast<uint32_t>(i);
+    entry["id"] = String("input-") + i;
+    entry["kind"] = "input";
     entry["name"] = item.name;
+    entry["room"] = item.room;
+    entry["favorite"] = item.favorite;
     entry["enabled"] = item.enabled;
     entry["gpio"] = item.gpio;
     entry["activeLow"] = item.activeLow;

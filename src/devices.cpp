@@ -14,11 +14,19 @@ std::map<String, DimmerState> g_dimmers;
 std::map<String, ShutterState> g_shutters;
 std::map<String, ThermostatState> g_thermostats;
 std::map<uint8_t, BoardState> g_boards;
+// Ultimo scambio sul bus per ogni canale: alimenta il pallino di attività
+// nell'interfaccia (comando inviato o stato cambiato letto dal polling).
+std::map<String, uint32_t> g_activity;
 uint32_t g_revision = 1;
 uint32_t g_lastPollAt = 0;
 uint32_t g_nextPollAt = 0;
 
 void touch() { g_revision++; }
+
+void markActivity(const String &entityId) {
+  if (!entityId.length()) return;
+  g_activity[entityId] = millis();
+}
 
 bool isThermostatActive(uint8_t channel, const protocol::Poll &poll) {
   const uint8_t bit = 1 << (constrain(channel, 1, 8) - 1);
@@ -48,25 +56,35 @@ void applyPollToEntities(uint8_t address, const protocol::Poll &poll) {
       if (board.kind == "light") {
         const uint8_t bit = 1 << (constrain(channel.channel, 1, 8) - 1);
         LightState &state = g_lights[id];
-        state.isOn = (poll.outputMask & bit) ? 1 : 0;
+        const int8_t next = (poll.outputMask & bit) ? 1 : 0;
+        // Stato cambiato senza un nostro comando: è arrivato dal bus (pulsante fisico).
+        if (state.isOn != next) markActivity(id);
+        state.isOn = next;
         state.updatedAt = now;
       } else if (board.kind == "dimmer") {
         DimmerState &state = g_dimmers[id];
+        if (state.level != poll.dimmerLevel) markActivity(id);
         state.level = poll.dimmerLevel;
         state.isOn = poll.dimmerLevel > 0 ? 1 : 0;
         if (poll.dimmerLevel > 0) state.lastOnLevel = poll.dimmerLevel;
         state.updatedAt = now;
       } else if (board.kind == "thermostat") {
         ThermostatState &state = g_thermostats[id];
+        const int8_t nextActive = isThermostatActive(channel.channel, poll) ? 1 : 0;
+        const float nextSetpoint = poll.setpoint > 0 ? static_cast<float>(poll.setpoint)
+                                                     : state.setpoint;
+        if (state.isActive != nextActive || fabsf(state.setpoint - nextSetpoint) > 0.01f) {
+          markActivity(id);
+        }
         state.temperature = poll.temperature;
         state.hasTemperature = true;
         if (poll.setpoint > 0) {
-          state.setpoint = static_cast<float>(poll.setpoint);
+          state.setpoint = nextSetpoint;
           state.isOn = 1;
         } else {
           state.isOn = 0;
         }
-        state.isActive = isThermostatActive(channel.channel, poll) ? 1 : 0;
+        state.isActive = nextActive;
         state.updatedAt = now;
       }
     }
@@ -112,6 +130,11 @@ void channelStateJson(const Entity &entity, JsonObject item) {
   item["room"] = entity.room;
   item["favorite"] = entity.favorite;
   item["online"] = boardOnline(entity.address);
+  auto activity = g_activity.find(entity.id);
+  if (activity != g_activity.end()) {
+    const uint32_t elapsed = millis() - activity->second;
+    if (elapsed < 60000) item["busActivityAgoMs"] = elapsed;
+  }
 
   if (entity.kind == "light") {
     const LightState *state = lightState(entity.id);
@@ -328,6 +351,7 @@ CommandResult commandLight(const String &entityId, const String &action) {
   LightState &state = g_lights[entityId];
   state.isOn = (normalized == "on") ? 1 : 0;
   state.updatedAt = millis();
+  markActivity(entityId);
   touch();
 
   String pollError;
@@ -382,6 +406,7 @@ CommandResult commandDimmer(const String &entityId, const String &action, int le
   state.isOn = target > 0 ? 1 : 0;
   if (target > 0) state.lastOnLevel = target;
   state.updatedAt = millis();
+  markActivity(entityId);
   touch();
 
   String pollError;
@@ -431,6 +456,7 @@ CommandResult commandShutter(const String &entityId, const String &action) {
   ShutterState &state = g_shutters[entityId];
   state.action = normalized;
   state.updatedAt = millis();
+  markActivity(entityId);
   touch();
   result.ok = true;
   return result;
@@ -508,6 +534,7 @@ CommandResult commandThermostat(const String &entityId, bool hasSetpoint, float 
   }
 
   state.updatedAt = millis();
+  markActivity(entityId);
   touch();
 
   String pollError;
@@ -595,6 +622,9 @@ void statusJson(JsonObject out, bool refresh, const std::vector<uint8_t> *refres
     for (const cfg::Channel &channel : board.channels) addRoom(channel.room);
   }
   for (const cfg::Sequence &sequence : current.sequences) addRoom(sequence.room);
+  for (const cfg::InputCfg &input : current.inputs) {
+    if (input.enabled) addRoom(input.room);
+  }
 
   JsonArray rooms = out["rooms"].to<JsonArray>();
   for (const String &roomName : roomNames) {
@@ -618,6 +648,24 @@ void statusJson(JsonObject out, bool refresh, const std::vector<uint8_t> *refres
       item["room"] = sequence.room;
       item["favorite"] = sequence.favorite;
       item["steps"] = static_cast<uint32_t>(sequence.steps.size());
+      item["online"] = true;
+    }
+
+    JsonArray roomInputs = room["inputs"].to<JsonArray>();
+    for (size_t index = 0; index < current.inputs.size(); index++) {
+      const cfg::InputCfg &input = current.inputs[index];
+      if (!input.enabled || input.room != roomName) continue;
+      JsonObject item = roomInputs.add<JsonObject>();
+      item["id"] = String("input-") + index;
+      item["index"] = static_cast<uint32_t>(index);
+      item["kind"] = "input";
+      item["name"] = input.name;
+      item["room"] = input.room;
+      item["favorite"] = input.favorite;
+      item["gpio"] = input.gpio;
+      item["sequenceId"] = input.sequenceId;
+      const cfg::Sequence *linked = cfg::findSequence(input.sequenceId);
+      item["sequenceName"] = linked != nullptr ? linked->name : String();
       item["online"] = true;
     }
 

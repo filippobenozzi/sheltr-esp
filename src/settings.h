@@ -67,6 +67,8 @@ struct InputCfg {
   bool activeLow = true;   // contatto verso GND
   uint16_t debounceMs = 60;
   String name;
+  String room = "Senza stanza";
+  bool favorite = false;
   String sequenceId;
 };
 

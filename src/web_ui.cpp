@@ -624,10 +624,17 @@ void handleFavorite() {
   cfg::Channel *channel = cfg::findChannel(id, &board);
   if (channel != nullptr) {
     channel->favorite = favorite;
+  } else if (id.startsWith("input-")) {
+    const int index = id.substring(6).toInt();
+    if (index < 0 || index >= static_cast<int>(cfg::config().inputs.size())) {
+      sendError(404, F("Ingresso non trovato"));
+      return;
+    }
+    cfg::config().inputs[index].favorite = favorite;
   } else {
     cfg::Sequence *sequence = cfg::findSequence(id);
     if (sequence == nullptr) {
-      sendError(404, F("Dispositivo o sequenza non trovati"));
+      sendError(404, F("Dispositivo, sequenza o ingresso non trovati"));
       return;
     }
     sequence->favorite = favorite;
@@ -734,6 +741,9 @@ void handleInputAssign() {
   target.sequenceId = sequenceId;
   const String name = bodyString(body, "name");
   if (name.length()) target.name = name;
+  const String room = bodyString(body, "room");
+  if (room.length()) target.room = room;
+  if (body["favorite"].is<bool>()) target.favorite = body["favorite"].as<bool>();
 
   if (!cfg::save()) {
     sendError(500, F("Salvataggio ingresso fallito"));
