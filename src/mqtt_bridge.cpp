@@ -393,6 +393,11 @@ void cloudInstanceJson(JsonObject out) {
       entry["channel"] = channel.channel;
       entry["name"] = channel.name;
       entry["room"] = channel.room;
+      entry["favorite"] = channel.favorite;
+      entry["notifyOnChange"] = channel.notifyOnChange;
+      // Il profilo viaggia anche verso il portale: così una modifica fatta qui in
+      // locale si riflette sul cloud (sincronizzazione bidirezionale).
+      cfg::profileJson(channel.profile, board.kind, entry["profile"].to<JsonObject>());
 
       JsonObject deviceEntry = deviceList.add<JsonObject>();
       deviceEntry["id"] = cfg::entityId(board.id, channel.channel);
@@ -493,6 +498,31 @@ void handleCloudSettings(const uint8_t *payload, unsigned int length) {
   publishCloudConfig();  // rimanda la config aggiornata al portale
 }
 
+// Azioni immediate richieste dal portale (avvio/stop sequenze): le esegue il gateway.
+void handleCloudAction(const uint8_t *payload, unsigned int length) {
+  JsonDocument doc;
+  if (deserializeJson(doc, payload, length)) {
+    log_w("Azione cloud non valida");
+    return;
+  }
+  const String action = doc["action"].is<const char *>() ? String(doc["action"].as<const char *>()) : String();
+  if (action == "sequence.run") {
+    const String id = doc["id"].is<const char *>() ? String(doc["id"].as<const char *>()) : String();
+    if (!id.length()) return;
+    String error;
+    if (!sequences::start(id, "cloud", error)) {
+      log_w("Avvio sequenza '%s' dal cloud fallito: %s", id.c_str(), error.c_str());
+      return;
+    }
+    log_i("Sequenza '%s' avviata dal cloud", id.c_str());
+    return;
+  }
+  if (action == "sequence.stop") {
+    sequences::stopAll();
+    log_i("Sequenze interrotte dal cloud");
+  }
+}
+
 void onCloudMessage(char *topic, uint8_t *payload, unsigned int length) {
   const String instanceId = cfg::config().cloud.instanceId;
   if (instanceId + "/cmd" == topic) {
@@ -501,6 +531,10 @@ void onCloudMessage(char *topic, uint8_t *payload, unsigned int length) {
   }
   if (instanceId + "/settings" == topic) {
     handleCloudSettings(payload, length);
+    return;
+  }
+  if (instanceId + "/action" == topic) {
+    handleCloudAction(payload, length);
   }
 }
 
@@ -571,6 +605,7 @@ void connectCloud() {
   g_cloud.subscribe((settings.instanceId + "/cmd").c_str());
   // QoS 1: alla sottoscrizione riceviamo subito il retained con preferiti/profili.
   g_cloud.subscribe((settings.instanceId + "/settings").c_str(), 1);
+  g_cloud.subscribe((settings.instanceId + "/action").c_str(), 1);
   publishCloudConfig();
 }
 

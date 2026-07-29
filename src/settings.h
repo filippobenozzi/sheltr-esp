@@ -32,6 +32,9 @@ struct Channel {
   String name;
   String room = "Senza stanza";
   bool favorite = false;
+  // Notifica di cambio stato: la invia il portale, il flag e' qui solo per tenerlo
+  // sincronizzato in entrambe le direzioni (il dispositivo non invia notifiche).
+  bool notifyOnChange = false;
   Profile profile;
 };
 
@@ -195,6 +198,9 @@ void resetDefaults(bool keepNetwork);
 // Applica un documento JSON (dalla UI o da un backup) alla configurazione corrente.
 bool applyJson(JsonObjectConst input, String &error);
 void toJson(JsonObject out, bool includeSecrets);
+
+// Serializza un profilo orario nel formato usato da UI e portale.
+void profileJson(const Profile &profile, const String &kind, JsonObject out);
 
 // Applica preferiti e profili orari arrivati dal cloud (topic <istanza>/settings).
 // Tocca solo i canali indicati: schede, stanze e nomi restano di competenza locale.

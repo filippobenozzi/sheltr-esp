@@ -234,6 +234,7 @@ void parseBoards(JsonArrayConst input, std::vector<Board> &boards) {
         channel.name = toText(found->second["name"], defaultChannelName(board.kind, number));
         channel.room = toText(found->second["room"], "Senza stanza");
         channel.favorite = toBool(found->second["favorite"], false);
+        channel.notifyOnChange = toBool(found->second["notifyOnChange"], false);
         parseProfile(found->second["profile"], board.kind, channel.profile);
       } else {
         channel.name = defaultChannelName(board.kind, number);
@@ -497,6 +498,10 @@ void resetDefaults(bool keepNetwork) {
   g_config.revision++;
 }
 
+void profileJson(const Profile &profile, const String &kind, JsonObject out) {
+  profileToJson(profile, kind, out);
+}
+
 bool applyCloudSettings(JsonObjectConst input) {
   if (input.isNull()) return false;
 
@@ -527,6 +532,13 @@ bool applyCloudSettings(JsonObjectConst input) {
       const bool favorite = entry["favorite"].as<bool>();
       if (channel->favorite != favorite) {
         channel->favorite = favorite;
+        changed = true;
+      }
+    }
+    if (entry["notifyOnChange"].is<bool>()) {
+      const bool notify = entry["notifyOnChange"].as<bool>();
+      if (channel->notifyOnChange != notify) {
+        channel->notifyOnChange = notify;
         changed = true;
       }
     }
@@ -814,6 +826,7 @@ void toJson(JsonObject out, bool includeSecrets) {
       entry["name"] = channel.name;
       entry["room"] = channel.room;
       entry["favorite"] = channel.favorite;
+      entry["notifyOnChange"] = channel.notifyOnChange;
       profileToJson(channel.profile, board.kind, entry["profile"].to<JsonObject>());
     }
   }
