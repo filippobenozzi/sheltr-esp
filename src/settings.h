@@ -73,6 +73,9 @@ struct InputCfg {
   String room = "Senza stanza";
   bool favorite = false;
   String sequenceId;
+  // Notifica allo scatto: la invia il portale (il gateway pubblica solo l'evento).
+  bool notifyOnChange = false;
+  String notifyText;  // testo personalizzato; vuoto = testo predefinito
 };
 
 constexpr size_t INPUT_COUNT = 8;

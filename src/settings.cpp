@@ -345,6 +345,10 @@ void parseInputs(JsonArrayConst input, std::vector<InputCfg> &inputs) {
                                                             : String("Ingresso ") + (index + 1));
     target.room = toText(item["room"], target.room.length() ? target.room : String("Senza stanza"));
     target.favorite = toBool(item["favorite"], target.favorite);
+    target.notifyOnChange = toBool(item["notifyOnChange"], target.notifyOnChange);
+    if (item["notifyText"].is<const char *>()) {
+      target.notifyText = toText(item["notifyText"], "");
+    }
     if (item["sequenceId"].is<const char *>()) {
       target.sequenceId = toText(item["sequenceId"], "");
     }
@@ -545,6 +549,32 @@ bool applyCloudSettings(JsonObjectConst input) {
     if (entry["profile"].is<JsonObjectConst>()) {
       parseProfile(entry["profile"], board->kind, channel->profile);
       changed = true;
+    }
+  }
+
+  // Ingressi: il portale può impostare notifica e testo personalizzato.
+  JsonArrayConst inputEntries = input["inputs"].as<JsonArrayConst>();
+  if (!inputEntries.isNull()) {
+    for (JsonVariantConst item : inputEntries) {
+      if (!item.is<JsonObjectConst>()) continue;
+      JsonObjectConst entry = item.as<JsonObjectConst>();
+      const int index = toInt(entry["index"], -1);
+      if (index < 0 || static_cast<size_t>(index) >= g_config.inputs.size()) continue;
+      InputCfg &target = g_config.inputs[index];
+      if (entry["notifyOnChange"].is<bool>()) {
+        const bool notify = entry["notifyOnChange"].as<bool>();
+        if (target.notifyOnChange != notify) {
+          target.notifyOnChange = notify;
+          changed = true;
+        }
+      }
+      if (entry["notifyText"].is<const char *>()) {
+        const String text = toText(entry["notifyText"], "");
+        if (target.notifyText != text) {
+          target.notifyText = text;
+          changed = true;
+        }
+      }
     }
   }
 
@@ -770,6 +800,8 @@ void toJson(JsonObject out, bool includeSecrets) {
     entry["name"] = item.name;
     entry["room"] = item.room;
     entry["favorite"] = item.favorite;
+    entry["notifyOnChange"] = item.notifyOnChange;
+    entry["notifyText"] = item.notifyText;
     entry["sequenceId"] = item.sequenceId;
   }
 

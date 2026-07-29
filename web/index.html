@@ -1445,10 +1445,11 @@
       hex.slice(6, 8).join("") + "-" + hex.slice(8, 10).join("") + "-" + hex.slice(10).join("");
   }
 
-  function inputCell(value, onChange) {
+  function inputCell(value, onChange, placeholder) {
     const cell = document.createElement("td");
     const input = document.createElement("input");
     input.type = "text"; input.value = value || "";
+    if (placeholder) input.placeholder = placeholder;
     input.addEventListener("change", () => onChange(input.value));
     cell.appendChild(input);
     return cell;
@@ -1497,7 +1498,7 @@
 
       const table = document.createElement("table");
       const header = document.createElement("tr");
-      for (const label of ["CH", "Nome", "Stanza", "Preferito", "Profilo"]) header.appendChild(el("th", null, label));
+      for (const label of ["CH", "Nome", "Stanza", "Preferito", "Notifica cloud", "Profilo"]) header.appendChild(el("th", null, label));
       table.appendChild(header);
       for (const channel of board.channels || []) {
         const row = document.createElement("tr");
@@ -1513,6 +1514,19 @@
         });
         favoriteCell.appendChild(star);
         row.appendChild(favoriteCell);
+
+        // Notifica di cambio stato: la invia il portale (serve il cloud collegato).
+        const notifyCell = document.createElement("td");
+        const notify = document.createElement("input");
+        notify.type = "checkbox";
+        notify.checked = Boolean(channel.notifyOnChange);
+        notify.disabled = !(state.config.cloud && state.config.cloud.enabled);
+        notify.title = notify.disabled
+          ? "Collega il dispositivo a Sheltr Cloud per usare le notifiche"
+          : "Notifica inviata dal portale al cambio di stato";
+        notify.addEventListener("change", () => { channel.notifyOnChange = notify.checked; });
+        notifyCell.appendChild(notify);
+        row.appendChild(notifyCell);
 
         const profileCell = document.createElement("td");
         const button = el("button", "small", (channel.profile && channel.profile.enabled) ? "Attivo" : "Imposta");
@@ -1691,7 +1705,7 @@
     }
 
     const header = document.createElement("tr");
-    for (const label of ["#", "Nome", "Stanza", "Preferito", "Sequenza", "Stato"]) {
+    for (const label of ["#", "Nome", "Stanza", "Preferito", "Sequenza", "Notifica", "Testo notifica", "Stato"]) {
       header.appendChild(el("th", null, label));
     }
     table.appendChild(header);
@@ -1729,6 +1743,17 @@
       select.addEventListener("change", () => { item.sequenceId = select.value; });
       sequenceCell.appendChild(select);
       row.appendChild(sequenceCell);
+
+      // Notifica allo scatto: la invia il portale, qui si sceglie se e con che testo.
+      const notifyCell = document.createElement("td");
+      const notify = document.createElement("input");
+      notify.type = "checkbox";
+      notify.checked = Boolean(item.notifyOnChange);
+      notify.addEventListener("change", () => { item.notifyOnChange = notify.checked; });
+      notifyCell.appendChild(notify);
+      row.appendChild(notifyCell);
+      row.appendChild(inputCell(item.notifyText || "", (value) => { item.notifyText = value; },
+        "Testo libero (vuoto = predefinito)"));
 
       const live = ((state.status && state.status.inputs) || []).find((entry) => entry.index === index);
       row.appendChild(el("td", "muted", disabled ? "disattivato in Sistema"

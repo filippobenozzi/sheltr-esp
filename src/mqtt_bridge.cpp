@@ -630,6 +630,28 @@ void publishStates() {
   g_publishedRevision = devices::stateRevision();
 }
 
+void publishInputEvent(size_t index) {
+  if (!g_cloud.connected()) return;
+  const std::vector<cfg::InputCfg> &inputs = cfg::config().inputs;
+  if (index >= inputs.size()) return;
+  const cfg::InputCfg &item = inputs[index];
+  if (!item.notifyOnChange) return;  // notifica non richiesta per questo ingresso
+
+  JsonDocument doc;
+  JsonObject root = doc.to<JsonObject>();
+  root["type"] = "input";
+  root["id"] = String("input-") + index;
+  root["name"] = item.name;
+  root["room"] = item.room;
+  root["text"] = item.notifyText;
+  root["active"] = true;
+  String payload;
+  serializeJson(doc, payload);
+  const String topic = cfg::config().cloud.instanceId + "/event";
+  g_cloud.publish(topic.c_str(), reinterpret_cast<const uint8_t *>(payload.c_str()), payload.length(),
+                  false);
+}
+
 void loop() {
   const cfg::Config &current = cfg::config();
   const uint32_t now = millis();

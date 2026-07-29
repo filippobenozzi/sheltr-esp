@@ -17,6 +17,10 @@ void reload();
 // Forza la pubblicazione degli stati (usata dopo i comandi dalla UI).
 void publishStates();
 
+// Notifica al portale lo scatto di un ingresso: e' il cloud a inviare la
+// notifica vera (push/Telegram), il gateway pubblica solo l'evento.
+void publishInputEvent(size_t index);
+
 bool localConnected();
 bool cloudConnected();
 void statusJson(JsonObject out);

@@ -1,5 +1,6 @@
 #include "inputs.h"
 
+#include "mqtt_bridge.h"
 #include "sequences.h"
 #include "settings.h"
 
@@ -77,6 +78,9 @@ void loop() {
 
     state.triggerCount++;
     state.lastTriggerAt = now;
+    // L'evento va al portale a prescindere dalla sequenza collegata: se l'ingresso
+    // ha la notifica attiva, sara' il cloud a inviarla.
+    mqtt::publishInputEvent(i);
     if (!item.sequenceId.length()) {
       log_i("Ingresso %u attivato: nessuna sequenza assegnata", static_cast<unsigned>(i + 1));
       continue;
@@ -101,6 +105,8 @@ void statusJson(JsonArray out) {
     entry["name"] = item.name;
     entry["room"] = item.room;
     entry["favorite"] = item.favorite;
+    entry["notifyOnChange"] = item.notifyOnChange;
+    entry["notifyText"] = item.notifyText;
     entry["enabled"] = item.enabled;
     entry["gpio"] = item.gpio;
     entry["activeLow"] = item.activeLow;
