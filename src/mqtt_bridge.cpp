@@ -414,13 +414,8 @@ void cloudInstanceJson(JsonObject out) {
   // Sequenze e ingressi: il portale li mostra in sola lettura (restano gestiti qui).
   JsonArray sequences = out["sequences"].to<JsonArray>();
   for (const cfg::Sequence &sequence : current.sequences) {
-    JsonObject item = sequences.add<JsonObject>();
-    item["id"] = sequence.id;
-    item["name"] = sequence.name;
-    item["room"] = sequence.room;
-    item["favorite"] = sequence.favorite;
-    item["stepsCount"] = static_cast<uint32_t>(sequence.steps.size());
-    item["scheduleEnabled"] = sequence.schedule.enabled;
+    // Definizione completa (passi e orari): il portale la usa per l'editor.
+    cfg::sequenceJson(sequence, sequences.add<JsonObject>());
   }
   inputs::statusJson(out["inputs"].to<JsonArray>());
 
@@ -580,7 +575,9 @@ void connectLocal() {
 void connectCloud() {
   const cfg::CloudCfg &settings = cfg::config().cloud;
   g_cloud.setServer(settings.host.c_str(), settings.port);
-  g_cloud.setBufferSize(2048);
+  // Le impostazioni dal portale (preferiti, profili, sequenze complete) possono
+  // superare i 2 KB: con un buffer troppo piccolo il messaggio verrebbe scartato.
+  g_cloud.setBufferSize(8192);
   g_cloud.setKeepAlive(45);
   g_cloud.setCallback(onCloudMessage);
 

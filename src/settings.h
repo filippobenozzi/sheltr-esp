@@ -205,6 +205,9 @@ void toJson(JsonObject out, bool includeSecrets);
 // Serializza un profilo orario nel formato usato da UI e portale.
 void profileJson(const Profile &profile, const String &kind, JsonObject out);
 
+// Serializza una sequenza completa (passi e orari) per il portale.
+void sequenceJson(const Sequence &sequence, JsonObject out);
+
 // Applica preferiti e profili orari arrivati dal cloud (topic <istanza>/settings).
 // Tocca solo i canali indicati: schede, stanze e nomi restano di competenza locale.
 // Ritorna true se qualcosa e' cambiato (allora va salvato e ripubblicato).

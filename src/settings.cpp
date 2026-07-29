@@ -506,6 +506,8 @@ void profileJson(const Profile &profile, const String &kind, JsonObject out) {
   profileToJson(profile, kind, out);
 }
 
+void sequenceJson(const Sequence &sequence, JsonObject out) { sequenceToJson(sequence, out); }
+
 bool applyCloudSettings(JsonObjectConst input) {
   if (input.isNull()) return false;
 
@@ -575,6 +577,28 @@ bool applyCloudSettings(JsonObjectConst input) {
           changed = true;
         }
       }
+    }
+  }
+
+  // Sequenze create/modificate dal portale: sostituiscono l'elenco locale.
+  // Il portale invia sempre la lista completa (l'ha importata da qui poco prima).
+  JsonArrayConst sequenceEntries = input["sequences"].as<JsonArrayConst>();
+  if (!sequenceEntries.isNull()) {
+    std::vector<Sequence> parsed;
+    parseSequences(sequenceEntries, parsed);
+    JsonDocument before;
+    JsonDocument after;
+    JsonArray beforeArr = before.to<JsonArray>();
+    JsonArray afterArr = after.to<JsonArray>();
+    for (const Sequence &item : g_config.sequences) sequenceToJson(item, beforeArr.add<JsonObject>());
+    for (const Sequence &item : parsed) sequenceToJson(item, afterArr.add<JsonObject>());
+    String beforeText;
+    String afterText;
+    serializeJson(before, beforeText);
+    serializeJson(after, afterText);
+    if (beforeText != afterText) {
+      g_config.sequences = parsed;
+      changed = true;
     }
   }
 
