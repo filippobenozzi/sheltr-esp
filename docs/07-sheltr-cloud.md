@@ -37,8 +37,9 @@ L'endpoint interno del dispositivo è `POST /api/cloud/claim` con `{portalUrl, c
 
 | Topic | Direzione | Contenuto |
 |---|---|---|
-| `<istanza>/config` | dispositivo → portale | JSON retained con schede, canali, stanze e topic |
+| `<istanza>/config` | dispositivo → portale | JSON retained con schede, canali, stanze, sequenze, ingressi e topic |
 | `<istanza>/cmd` | portale → dispositivo | frame protocollo 1.6 (binario o esadecimale) |
+| `<istanza>/settings` | portale → dispositivo | JSON retained con preferiti e profili orari impostati dal cloud |
 | `<istanza>/pub` | dispositivo → portale | frame di risposta letto dal bus |
 | `<istanza>/bridge/status` | dispositivo → portale | `online` / `offline` (Last Will) |
 
@@ -71,6 +72,19 @@ Il payload di configurazione ha la stessa forma del firmware Sheltr Mini:
    schede, canali e stanze.
 4. Da quel momento i comandi del portale arrivano come frame su `casa-demo/cmd` e il gateway risponde su
    `casa-demo/pub`.
+
+## Preferiti e profili orari impostati dal cloud
+
+Il portale pubblica preferiti e profili orari su **`<istanza>/settings`** (retained, QoS 1) con un
+numero di **revisione**. Il gateway li applica alla configurazione locale, **salva su filesystem** e
+ripubblica la propria configurazione, così il portale resta allineato.
+
+- Le programmazioni le esegue **il gateway**: continuano a funzionare anche se il cloud è
+  irraggiungibile (il portale, per queste istanze, non le esegue apposta, per non farle partire due volte).
+- La revisione viene memorizzata (`cloud.settingsRevision`) e sopravvive al riavvio: un messaggio
+  retained più vecchio dell'ultima revisione applicata viene ignorato, così non sovrascrive modifiche
+  fatte nel frattempo sul dispositivo.
+- Vengono toccati solo i canali indicati: schede, nomi e stanze restano gestiti in locale.
 
 ## Come vengono trattati i frame
 

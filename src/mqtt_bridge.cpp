@@ -4,6 +4,7 @@
 #include <WiFi.h>
 
 #include "devices.h"
+#include "inputs.h"
 #include "json_utils.h"
 #include "net_manager.h"
 #include "protocol.h"
@@ -405,6 +406,19 @@ void cloudInstanceJson(JsonObject out) {
     }
   }
 
+  // Sequenze e ingressi: il portale li mostra in sola lettura (restano gestiti qui).
+  JsonArray sequences = out["sequences"].to<JsonArray>();
+  for (const cfg::Sequence &sequence : current.sequences) {
+    JsonObject item = sequences.add<JsonObject>();
+    item["id"] = sequence.id;
+    item["name"] = sequence.name;
+    item["room"] = sequence.room;
+    item["favorite"] = sequence.favorite;
+    item["stepsCount"] = static_cast<uint32_t>(sequence.steps.size());
+    item["scheduleEnabled"] = sequence.schedule.enabled;
+  }
+  inputs::statusJson(out["inputs"].to<JsonArray>());
+
   JsonObject mqttInfo = out["mqtt"].to<JsonObject>();
   mqttInfo["baseTopic"] = current.cloud.instanceId;
   mqttInfo["configTopic"] = current.cloud.instanceId + "/config";
@@ -460,10 +474,34 @@ void onLocalMessage(char *topic, uint8_t *payload, unsigned int length) {
   handleLocalCommand(String(topic), value);
 }
 
+// Preferiti e profili orari impostati dal cloud: si applicano alla configurazione
+// locale (che resta la fonte di verita' e li esegue anche a cloud irraggiungibile).
+void handleCloudSettings(const uint8_t *payload, unsigned int length) {
+  JsonDocument doc;
+  const DeserializationError error = deserializeJson(doc, payload, length);
+  if (error) {
+    log_w("Impostazioni cloud non valide: %s", error.c_str());
+    return;
+  }
+  if (!cfg::applyCloudSettings(doc.as<JsonObjectConst>())) return;
+  if (!cfg::save()) {
+    log_w("Salvataggio impostazioni dal cloud fallito");
+    return;
+  }
+  // I profili orari vengono riletti dalla configurazione a ogni giro di schedules::loop().
+  log_i("Impostazioni applicate dal cloud (preferiti/profili)");
+  publishCloudConfig();  // rimanda la config aggiornata al portale
+}
+
 void onCloudMessage(char *topic, uint8_t *payload, unsigned int length) {
-  const String expected = cfg::config().cloud.instanceId + "/cmd";
-  if (expected != topic) return;
-  handleCloudCommand(payload, length);
+  const String instanceId = cfg::config().cloud.instanceId;
+  if (instanceId + "/cmd" == topic) {
+    handleCloudCommand(payload, length);
+    return;
+  }
+  if (instanceId + "/settings" == topic) {
+    handleCloudSettings(payload, length);
+  }
 }
 
 void connectLocal() {
@@ -531,6 +569,8 @@ void connectCloud() {
   log_i("MQTT Sheltr Cloud connesso a %s:%u", settings.host.c_str(), settings.port);
   g_cloud.publish(willTopic.c_str(), "online", true);
   g_cloud.subscribe((settings.instanceId + "/cmd").c_str());
+  // QoS 1: alla sottoscrizione riceviamo subito il retained con preferiti/profili.
+  g_cloud.subscribe((settings.instanceId + "/settings").c_str(), 1);
   publishCloudConfig();
 }
 

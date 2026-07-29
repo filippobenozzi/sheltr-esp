@@ -163,6 +163,9 @@ struct CloudCfg {
   String payloadFormat = "frame_hex_space_crlf";
   // URL del portale usato per l'associazione tramite codice (POST /api/provision/claim).
   String portalUrl;
+  // Ultima revisione di impostazioni (preferiti/profili) applicata dal cloud: evita
+  // che un messaggio retained vecchio sovrascriva modifiche fatte dopo in locale.
+  uint32_t settingsRevision = 0;
 };
 
 struct Config {
@@ -192,6 +195,11 @@ void resetDefaults(bool keepNetwork);
 // Applica un documento JSON (dalla UI o da un backup) alla configurazione corrente.
 bool applyJson(JsonObjectConst input, String &error);
 void toJson(JsonObject out, bool includeSecrets);
+
+// Applica preferiti e profili orari arrivati dal cloud (topic <istanza>/settings).
+// Tocca solo i canali indicati: schede, stanze e nomi restano di competenza locale.
+// Ritorna true se qualcosa e' cambiato (allora va salvato e ripubblicato).
+bool applyCloudSettings(JsonObjectConst input);
 
 // Utility condivise
 String slugify(const String &value, const String &fallback);

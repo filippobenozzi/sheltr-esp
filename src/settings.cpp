@@ -497,6 +497,53 @@ void resetDefaults(bool keepNetwork) {
   g_config.revision++;
 }
 
+bool applyCloudSettings(JsonObjectConst input) {
+  if (input.isNull()) return false;
+
+  // Guardia di revisione: i messaggi retained possono essere piu' vecchi di quanto
+  // gia' applicato (o di una modifica fatta a mano sul dispositivo).
+  const uint32_t revision = static_cast<uint32_t>(input["revision"] | 0);
+  if (revision != 0 && revision <= g_config.cloud.settingsRevision) return false;
+
+  JsonArrayConst channels = input["channels"].as<JsonArrayConst>();
+  if (channels.isNull()) return false;
+
+  bool changed = false;
+  for (JsonVariantConst item : channels) {
+    if (!item.is<JsonObjectConst>()) continue;
+    JsonObjectConst entry = item.as<JsonObjectConst>();
+    String id = toText(entry["id"], "");
+    if (!id.length()) {
+      const String boardId = toText(entry["boardId"], "");
+      const uint8_t channel = static_cast<uint8_t>(constrain(toInt(entry["channel"], 0), 0, 8));
+      if (!boardId.length() || channel == 0) continue;
+      id = entityId(boardId, channel);
+    }
+    Board *board = nullptr;
+    Channel *channel = findChannel(id, &board);
+    if (channel == nullptr || board == nullptr) continue;
+
+    if (entry["favorite"].is<bool>()) {
+      const bool favorite = entry["favorite"].as<bool>();
+      if (channel->favorite != favorite) {
+        channel->favorite = favorite;
+        changed = true;
+      }
+    }
+    if (entry["profile"].is<JsonObjectConst>()) {
+      parseProfile(entry["profile"], board->kind, channel->profile);
+      changed = true;
+    }
+  }
+
+  if (revision != 0 && revision != g_config.cloud.settingsRevision) {
+    g_config.cloud.settingsRevision = revision;
+    changed = true;
+  }
+  if (changed) g_config.revision++;
+  return changed;
+}
+
 bool applyJson(JsonObjectConst input, String &error) {
   if (input.isNull()) {
     error = F("payload non valido");
@@ -618,6 +665,8 @@ bool applyJson(JsonObjectConst input, String &error) {
       next.cloud.payloadFormat = format;
     }
     next.cloud.portalUrl = toText(cloud["portalUrl"], next.cloud.portalUrl);
+    next.cloud.settingsRevision =
+        static_cast<uint32_t>(cloud["settingsRevision"] | next.cloud.settingsRevision);
   }
 
   if (input["roomColors"].is<JsonObjectConst>()) {
@@ -738,6 +787,7 @@ void toJson(JsonObject out, bool includeSecrets) {
   cloud["instanceName"] = current.cloud.instanceName;
   cloud["payloadFormat"] = current.cloud.payloadFormat;
   cloud["portalUrl"] = current.cloud.portalUrl;
+  cloud["settingsRevision"] = current.cloud.settingsRevision;
   cloud["configTopic"] = current.cloud.instanceId + "/config";
   cloud["commandTopic"] = current.cloud.instanceId + "/cmd";
   cloud["responseTopic"] = current.cloud.instanceId + "/pub";
