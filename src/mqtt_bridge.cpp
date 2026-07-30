@@ -419,6 +419,13 @@ void cloudInstanceJson(JsonObject out) {
   }
   inputs::statusJson(out["inputs"].to<JsonArray>());
 
+  // Colori stanze assegnati: il portale li rispecchia (per quelli non assegnati
+  // entrambi derivano lo stesso colore dal nome).
+  JsonObject roomColors = out["roomColors"].to<JsonObject>();
+  for (const auto &entry : current.roomColors) {
+    roomColors[entry.first] = entry.second;
+  }
+
   JsonObject mqttInfo = out["mqtt"].to<JsonObject>();
   mqttInfo["baseTopic"] = current.cloud.instanceId;
   mqttInfo["configTopic"] = current.cloud.instanceId + "/config";

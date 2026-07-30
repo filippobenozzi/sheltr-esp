@@ -563,6 +563,13 @@ bool applyCloudSettings(JsonObjectConst input) {
       const int index = toInt(entry["index"], -1);
       if (index < 0 || static_cast<size_t>(index) >= g_config.inputs.size()) continue;
       InputCfg &target = g_config.inputs[index];
+      if (entry["favorite"].is<bool>()) {
+        const bool favorite = entry["favorite"].as<bool>();
+        if (target.favorite != favorite) {
+          target.favorite = favorite;
+          changed = true;
+        }
+      }
       if (entry["notifyOnChange"].is<bool>()) {
         const bool notify = entry["notifyOnChange"].as<bool>();
         if (target.notifyOnChange != notify) {
@@ -576,6 +583,29 @@ bool applyCloudSettings(JsonObjectConst input) {
           target.notifyText = text;
           changed = true;
         }
+      }
+    }
+  }
+
+  // Colori stanze assegnati dal portale.
+  JsonObjectConst colors = input["roomColors"].as<JsonObjectConst>();
+  if (!colors.isNull()) {
+    for (JsonPairConst pair : colors) {
+      const String room = String(pair.key().c_str());
+      const String color = toText(pair.value(), "");
+      if (!room.length()) continue;
+      auto found = g_config.roomColors.find(room);
+      const bool present = found != g_config.roomColors.end();
+      if (!color.length()) {
+        if (present) {  // colore rimosso: torna al fallback derivato dal nome
+          g_config.roomColors.erase(found);
+          changed = true;
+        }
+        continue;
+      }
+      if (!present || found->second != color) {
+        g_config.roomColors[room] = color;
+        changed = true;
       }
     }
   }
