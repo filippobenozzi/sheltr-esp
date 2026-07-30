@@ -644,6 +644,9 @@ void handleFavorite() {
     sendError(500, F("Salvataggio preferito fallito"));
     return;
   }
+  // Il portale rispecchia i preferiti: ripubblichiamo subito la configurazione,
+  // altrimenti resterebbe con il retained precedente.
+  mqtt::publishConfig();
   JsonDocument doc(&SpiRamAllocator::instance());
   doc["ok"] = true;
   doc["id"] = id;
@@ -744,11 +747,15 @@ void handleInputAssign() {
   const String room = bodyString(body, "room");
   if (room.length()) target.room = room;
   if (body["favorite"].is<bool>()) target.favorite = body["favorite"].as<bool>();
+  if (body["notifyOnChange"].is<bool>()) target.notifyOnChange = body["notifyOnChange"].as<bool>();
+  if (body["notifyText"].is<const char *>()) target.notifyText = bodyString(body, "notifyText");
 
   if (!cfg::save()) {
     sendError(500, F("Salvataggio ingresso fallito"));
     return;
   }
+  // Il portale rispecchia nome, stanza, preferito e notifica degli ingressi.
+  mqtt::publishConfig();
   JsonDocument doc(&SpiRamAllocator::instance());
   doc["ok"] = true;
   doc["index"] = index;

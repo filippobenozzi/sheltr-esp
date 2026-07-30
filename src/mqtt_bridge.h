@@ -21,6 +21,11 @@ void publishStates();
 // notifica vera (push/Telegram), il gateway pubblica solo l'evento.
 void publishInputEvent(size_t index);
 
+// Ripubblica subito la configurazione sul portale. Da chiamare dopo una modifica
+// locale che il cloud rispecchia (preferiti, ingressi): senza questo il portale
+// resterebbe con il retained precedente fino alla prossima riconnessione.
+void publishConfig();
+
 bool localConnected();
 bool cloudConnected();
 void statusJson(JsonObject out);

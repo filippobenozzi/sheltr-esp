@@ -627,6 +627,8 @@ void publishStates() {
   g_publishedRevision = devices::stateRevision();
 }
 
+void publishConfig() { publishCloudConfig(); }
+
 void publishInputEvent(size_t index) {
   if (!g_cloud.connected()) return;
   const std::vector<cfg::InputCfg> &inputs = cfg::config().inputs;
