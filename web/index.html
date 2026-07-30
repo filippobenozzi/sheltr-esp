@@ -348,6 +348,13 @@
       </section>
 
       <section class="panel">
+        <h2>Heartbeat Sheltr Cloud</h2>
+        <p class="muted">Ogni quanto ripubblicare lo stato delle schede sul portale, così sa che il gateway è vivo. 0 = disattivato. Lo stato viene comunque inviato subito a ogni cambiamento.</p>
+        <div class="fields" style="margin-top:0.75rem">
+          <div class="field"><label for="cfg-cloud-heartbeat">Intervallo heartbeat (s)</label><input id="cfg-cloud-heartbeat" type="number" min="0" max="3600" /></div>
+        </div>
+      </section>
+      <section class="panel">
         <h2>Bus seriale</h2>
         <div class="fields">
           <div class="field"><label for="cfg-bus-tx">GPIO TX</label><input id="cfg-bus-tx" type="number" min="-1" max="48" /></div>
@@ -941,7 +948,7 @@
       const room = rooms.find((item) => item.name === state.room);
       if (!room) { state.room = null; renderControl(); return; }
       const crumb = el("div", "crumb");
-      const back = el("button", "small icon-btn");
+      const back = el("button", "small icon-btn primary");
       back.appendChild(icon("arrowLeft"));
       back.appendChild(el("span", null, "Stanze"));
       back.addEventListener("click", () => { state.room = null; renderControl(); });
@@ -1590,6 +1597,7 @@
     $("cfg-cloud-instance-name").value = config.cloud.instanceName || "";
     $("cfg-cloud-format").value = config.cloud.payloadFormat || "frame_hex_space_crlf";
     if (!$("cfg-cloud-portal").value) $("cfg-cloud-portal").value = config.cloud.portalUrl || "";
+    $("cfg-cloud-heartbeat").value = config.cloud.heartbeatSec;
     updateCloudTopics();
 
     // sezione Sistema
@@ -1856,6 +1864,7 @@
     config.cloud.instanceId = $("cfg-cloud-instance").value;
     config.cloud.instanceName = $("cfg-cloud-instance-name").value;
     config.cloud.payloadFormat = $("cfg-cloud-format").value;
+    config.cloud.heartbeatSec = Number($("cfg-cloud-heartbeat").value);
     if ($("cfg-cloud-pass").value) config.cloud.password = $("cfg-cloud-pass").value;
     else delete config.cloud.password;
 

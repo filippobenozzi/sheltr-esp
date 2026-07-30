@@ -86,6 +86,23 @@ ripubblica la propria configurazione, così il portale resta allineato.
   fatte nel frattempo sul dispositivo.
 - Vengono toccati solo i canali indicati: schede, nomi e stanze restano gestiti in locale.
 
+## Heartbeat e aggiornamento del portale
+
+Il gateway ripubblica lo stato reale delle schede sul topic di risposta (interroga il
+bus con un frame `0x40` e inoltra la risposta), che è esattamente ciò che il portale
+interpreta. Serve a due cose:
+
+- **A ogni cambiamento locale** (comando dall'interfaccia, ingresso, sequenza, profilo
+  orario) il portale viene avvisato subito, così aggiorna le card e, se il canale ha la
+  notifica attiva, la invia. Gli invii ravvicinati vengono accorpati (minimo 3 secondi).
+- **Heartbeat periodico**, regolabile in *Sistema → Heartbeat Sheltr Cloud*
+  (`cloud.heartbeatSec`, default 300 s, 0 = disattivato): il portale sa che il gateway
+  è vivo anche quando non cambia nulla.
+
+> Nel portale imposta anche *Config → istanza → Heartbeat dispositivo* con un valore
+> **non inferiore** all'intervallo qui: è quello che il portale usa per decidere se
+> mostrare il banner "Dispositivo offline".
+
 ## Come vengono trattati i frame
 
 Il bridge cloud è volutamente **trasparente**: il frame ricevuto viene inoltrato verbatim sul bus e la

@@ -172,6 +172,9 @@ struct CloudCfg {
   // Ultima revisione di impostazioni (preferiti/profili) applicata dal cloud: evita
   // che un messaggio retained vecchio sovrascriva modifiche fatte dopo in locale.
   uint32_t settingsRevision = 0;
+  // Heartbeat verso il portale: ogni quanti secondi ripubblicare lo stato delle
+  // schede, così il cloud sa che il gateway è vivo. 0 = disattivato.
+  uint16_t heartbeatSec = 300;
 };
 
 struct Config {

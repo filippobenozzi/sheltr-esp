@@ -24,6 +24,11 @@ uint32_t g_nextLocalAttempt = 0;
 uint32_t g_nextCloudAttempt = 0;
 uint32_t g_nextStatePublish = 0;
 uint32_t g_publishedRevision = 0;
+// Stato pubblicato verso il portale: revisione già inviata, prossimo heartbeat e
+// pausa minima fra due invii dovuti a cambi di stato ravvicinati.
+uint32_t g_cloudPublishedRevision = 0;
+uint32_t g_nextCloudHeartbeat = 0;
+uint32_t g_nextCloudStatePublish = 0;
 bool g_discoveryPublished = false;
 bool g_cloudConfigPublished = false;
 uint32_t g_localFailures = 0;
@@ -525,6 +530,31 @@ void handleCloudAction(const uint8_t *payload, unsigned int length) {
   }
 }
 
+// Ripubblica al portale lo stato reale delle schede: interroga il bus (frame 0x40)
+// e manda la risposta sul topic di risposta, che è esattamente ciò che il portale
+// interpreta per aggiornare le card, tenere il dispositivo "online" e inviare le
+// notifiche di cambio stato. Usata sia dall'heartbeat sia dopo un comando locale.
+void publishCloudBoardStates() {
+  if (!g_cloud.connected()) return;
+  const cfg::Config &current = cfg::config();
+  const String topic = current.cloud.instanceId + "/pub";
+  for (uint8_t address : cfg::allAddresses()) {
+    uint8_t frame[protocol::FRAME_LEN];
+    const uint8_t g[1] = {0};
+    protocol::build(address, protocol::CMD_POLL, g, 0, frame);
+    const devices::CommandResult result = devices::sendRawFrame(frame);
+    if (!result.ok || !result.responseHex.length()) continue;
+    uint8_t response[protocol::FRAME_LEN];
+    if (!protocol::extractHex(result.responseHex.c_str(), result.responseHex.length(), response)) {
+      continue;
+    }
+    const String out = protocol::formatPayload(response, current.cloud.payloadFormat);
+    g_cloud.publish(topic.c_str(), reinterpret_cast<const uint8_t *>(out.c_str()), out.length(),
+                    false);
+    g_cloud.loop();  // svuota il buffer fra una scheda e l'altra
+  }
+}
+
 void onCloudMessage(char *topic, uint8_t *payload, unsigned int length) {
   const String instanceId = cfg::config().cloud.instanceId;
   if (instanceId + "/cmd" == topic) {
@@ -627,6 +657,9 @@ void reload() {
   g_cloudConfigPublished = false;
   g_nextLocalAttempt = millis() + 500;
   g_nextCloudAttempt = millis() + 800;
+  // Primo heartbeat poco dopo la riconnessione, così il portale vede subito lo stato.
+  g_nextCloudHeartbeat = millis() + 5000;
+  g_nextCloudStatePublish = 0;
 }
 
 void publishStates() {
@@ -677,6 +710,26 @@ void loop() {
     if (g_cloud.connected()) {
       g_cloud.loop();
       if (!g_cloudConfigPublished) publishCloudConfig();
+
+      // Qualcosa è cambiato in locale (comando dall'interfaccia, ingresso, sequenza,
+      // profilo orario): avvisiamo il portale così si aggiorna e, se il canale ha la
+      // notifica attiva, la invia. Con una pausa minima per non intasare il bus se
+      // arrivano più cambi di fila.
+      const bool cloudStateChanged = devices::stateRevision() != g_cloudPublishedRevision;
+      if (cloudStateChanged && static_cast<int32_t>(now - g_nextCloudStatePublish) > 0) {
+        g_nextCloudStatePublish = now + 3000;
+        publishCloudBoardStates();
+        // La revisione va allineata DOPO la pubblicazione: il polling che facciamo qui
+        // aggiorna a sua volta lo stato interno e, se la leggessimo prima, il cambio si
+        // ri-innescherebbe da solo a ogni giro (polling continuo sul bus).
+        g_cloudPublishedRevision = devices::stateRevision();
+        g_nextCloudHeartbeat = now + static_cast<uint32_t>(current.cloud.heartbeatSec) * 1000UL;
+      } else if (current.cloud.heartbeatSec > 0 &&
+                 static_cast<int32_t>(now - g_nextCloudHeartbeat) > 0) {
+        g_nextCloudHeartbeat = now + static_cast<uint32_t>(current.cloud.heartbeatSec) * 1000UL;
+        publishCloudBoardStates();
+        g_cloudPublishedRevision = devices::stateRevision();
+      }
     } else if (static_cast<int32_t>(now - g_nextCloudAttempt) > 0) {
       g_nextCloudAttempt = now + 10000;
       connectCloud();
