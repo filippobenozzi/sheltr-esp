@@ -563,9 +563,11 @@
   };
 
   const ACTIVITY_WINDOW_MS = 6000;
+  const SETPOINT_DELAY_MS = 3000;  // inattività prima di inviare il setpoint
 
   const state = {
     activity: new Map(),  // id -> istante dell'ultimo comando inviato da questa pagina
+    pendingSetpoint: new Map(),  // id termostato -> {value, timer} in attesa di invio
     meta: null,
     status: null,
     config: null,
@@ -729,6 +731,26 @@
     }
   }
 
+  // Setpoint del termostato: si accumulano le pressioni su +/− e il comando parte
+  // dopo SETPOINT_DELAY_MS di inattività, così una regolazione di 3 gradi manda un
+  // solo frame sul bus invece di sei.
+  function queueSetpoint(id, value) {
+    const existing = state.pendingSetpoint.get(id);
+    if (existing) clearTimeout(existing.timer);
+    const timer = setTimeout(() => sendPendingSetpoint(id), SETPOINT_DELAY_MS);
+    state.pendingSetpoint.set(id, { value, timer });
+    renderControl();
+  }
+
+  async function sendPendingSetpoint(id) {
+    const pending = state.pendingSetpoint.get(id);
+    if (!pending) return;
+    clearTimeout(pending.timer);
+    state.pendingSetpoint.delete(id);
+    await command("thermostat", id, "/api/thermostats/command",
+      { thermostatId: id, setpoint: pending.value }, "Setpoint termostato");
+  }
+
   async function toggleFavorite(id, next) {
     try {
       await api("/api/favorites", { method: "POST", body: { id, favorite: next } });
@@ -866,7 +888,11 @@
     }
     tile.appendChild(modes);
 
-    const setpoint = Number(item.setpoint ?? 21);
+    // Il setpoint in attesa di invio ha la precedenza sul valore letto dal bus:
+    // mentre l'utente preme +/− la tile mostra dove sta andando, non dov'era.
+    const pending = state.pendingSetpoint.get(item.id);
+    const setpoint = pending ? pending.value : Number(item.setpoint ?? 21);
+
     const controls = el("div", "row");
     controls.style.flexWrap = "nowrap";
     const minus = el("button", "small", "−");
@@ -874,11 +900,13 @@
     minus.style.flex = "1"; plus.style.flex = "1";
     minus.disabled = disabled; plus.disabled = disabled;
     const box = el("div", "setpoint");
-    box.appendChild(el("span", null, "Setpoint"));
-    box.appendChild(el("span", null, setpoint.toFixed(1) + "°"));
+    box.appendChild(el("span", null, pending ? "Invio tra poco" : "Setpoint"));
+    const value = el("span", null, setpoint.toFixed(1) + "°");
+    if (pending) value.style.color = "var(--sky)";
+    box.appendChild(value);
     const adjust = (delta) => {
       const next = Math.min(30, Math.max(5, Math.round((setpoint + delta) * 2) / 2));
-      command("thermostat", item.id, "/api/thermostats/command", { thermostatId: item.id, setpoint: next }, "Setpoint termostato");
+      queueSetpoint(item.id, next);
     };
     minus.addEventListener("click", () => adjust(-0.5));
     plus.addEventListener("click", () => adjust(0.5));

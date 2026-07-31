@@ -219,6 +219,13 @@ curl -X POST http://sheltr.local/api/inputs \
   -d '{"index":0,"name":"Pulsante ingresso","room":"Sala","favorite":true,"sequenceId":"buonanotte"}'
 ```
 
+## Regolazione del setpoint
+
+I pulsanti `+` e `−` del termostato non inviano un comando a ogni pressione: la tile mostra subito il
+valore che stai impostando (in azzurro, con l'etichetta «Invio tra poco») e il comando parte **dopo 3
+secondi di inattività**, una volta sola con il valore finale. Portare la temperatura da 20 a 23 gradi
+manda quindi un solo frame sul bus invece di sei.
+
 ## Indicatore di attività sul bus
 
 A destra del nome di ogni dispositivo compare un **pallino verde** mentre il canale sta scambiando
