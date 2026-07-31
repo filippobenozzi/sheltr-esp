@@ -27,6 +27,11 @@ Frame fisso di **14 byte**, seriale **9600 8N1**:
 | Dimmer | `0x5B` | G1 = `0x53`, G2 = livello 0–9 |
 | Termostato setpoint | `0x5A` | G1 = parte intera, G2 = decimo; `0,0` = spegnimento |
 | Termostato stagione | `0x6B` | G1 = `0x00` inverno / `0x01` estate |
+| Attivazione liste scenari | `0xAA` | G1 = numero lista (da 1); G2 = `0x41` attiva / `0x53` disattiva / `0x55` scenario multiplo |
+
+Il comando `0xAA` è **broadcast**: tutte le schede lo ricevono e nessuna risponde. Il gateway lo usa in
+**ricezione** per far partire le proprie sequenze (vedi
+[03 · Sequencer](03-configurazione.md#avvio-dal-bus-aann)).
 
 Le schede rispondono con un frame dello stesso indirizzo e comando; il firmware valida anche i byte G
 attesi (per esempio il livello impostato sul dimmer) e ripete il comando se la risposta non arriva entro

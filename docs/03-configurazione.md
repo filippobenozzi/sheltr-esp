@@ -185,12 +185,20 @@ sequenze diverse sono ammessi.
 
 ### Avvio dal bus (`AAnn`)
 
-Nel campo **Comando bus** si assegna un numero (1–255). Il gateway ascolta il bus quando è a riposo e
-avvia la sequenza quando riceve:
+Nel campo **Comando bus** si assegna il numero della lista scenari (1–255). Il gateway ascolta il bus
+quando è a riposo e avvia la sequenza quando riceve il comando **`0xAA` «Attivazione liste Scenari»** del
+protocollo 1.6, in una delle due forme:
 
-- un **frame protocollo** con comando `0xAA` e il numero nel primo byte dati
-  (`49 <addr> AA 01 00 … 46` → scenario 1);
-- oppure il **testo ASCII** `AA01` (due cifre esadecimali dopo `AA`).
+- **frame protocollo**: `49 <addr> AA <lista> <azione> 00 … 46`, dove `<lista>` è il numero dello scenario
+  e `<azione>` vale `0x41` (attiva), `0x53` (disattiva) o `0x55` (scenario multiplo);
+- **messaggio testuale** che *inizia* con `AA` seguito dal numero in **decimale**: `AA01`, `AA1`, `AA12`.
+  Quello che segue il numero (azione e altri parametri, per esempio `AA02,41,00`) viene ignorato.
+
+Il numero può avere una o più cifre — `AA1` e `AA01` valgono lo stesso scenario — e deve trovarsi
+all'inizio del messaggio: una `AA` in mezzo ad altri dati non fa scattare nulla. I messaggi si chiudono a
+fine riga (`CR`/`LF`) oppure dopo una breve pausa sul bus, così anche `AA1` senza terminatore funziona.
+
+> Per ora l'azione (`G2`) non viene interpretata: qualunque `AA<numero>` avvia la sequenza associata.
 
 Lo stato *Sistema* riporta quanti comandi scenario sono arrivati e qual è stato l'ultimo.
 

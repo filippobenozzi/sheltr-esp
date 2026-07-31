@@ -146,6 +146,34 @@ SheltrBus::Result SheltrBus::sendRaw(const uint8_t *raw, bool waitResponse, Vali
   return transact(raw, waitResponse, validator);
 }
 
+namespace {
+
+// "AA01", "AA1", "AA12,altri,parametri" -> numero della lista scenari.
+// Il numero è decimale, a una o più cifre, e sta all'inizio del messaggio;
+// quello che segue (azione, parametri) per ora non viene interpretato.
+bool parseAsciiScenario(const uint8_t *data, size_t length, uint16_t &scenario) {
+  size_t index = 0;
+  while (index < length && (data[index] == ' ' || data[index] == '\t' || data[index] < 0x20)) {
+    index++;
+  }
+  if (index + 2 >= length) return false;
+  if (toupper(data[index]) != 'A' || toupper(data[index + 1]) != 'A') return false;
+  index += 2;
+
+  uint32_t value = 0;
+  size_t digits = 0;
+  while (index < length && isdigit(data[index]) && digits < 3) {
+    value = value * 10 + (data[index] - '0');
+    index++;
+    digits++;
+  }
+  if (digits == 0 || value == 0 || value > 255) return false;
+  scenario = static_cast<uint16_t>(value);
+  return true;
+}
+
+}  // namespace
+
 void SheltrBus::listen() {
   if (serial_ == nullptr || trigger_ == nullptr) return;
   // Solo quando il bus è libero: durante una transazione i byte appartengono alla risposta.
@@ -163,45 +191,59 @@ void SheltrBus::listen() {
     listenLastByteAt_ = now;
   }
 
-  if (listenUsed_ == 0) {
-    if (mutex_ != nullptr) xSemaphoreGive(mutex_);
-    return;
-  }
+  uint16_t triggers[4];
+  size_t triggerCount = 0;
 
-  uint16_t trigger = 0;
-
-  // 1) frame protocollo con comando 0xAA: il numero dello scenario è in G1.
+  // 1) Frame protocollo 0xAA "Attivazione liste Scenari": G1 = numero lista.
   uint8_t candidate[protocol::FRAME_LEN];
-  if (protocol::extractBinary(listenBuffer_, listenUsed_, candidate)) {
+  while (triggerCount < 4 && protocol::extractBinary(listenBuffer_, listenUsed_, candidate)) {
     protocol::Frame frame;
-    if (protocol::parse(candidate, frame) && frame.command == 0xAA) trigger = frame.g[0];
-    listenUsed_ = 0;
+    if (protocol::parse(candidate, frame) && frame.command == 0xAA && frame.g[0] > 0) {
+      triggers[triggerCount++] = frame.g[0];
+    }
+    listenUsed_ = 0;  // il frame è stato consumato
   }
 
-  // 2) testo ASCII "AA01": due cifre esadecimali dopo AA.
-  if (trigger == 0 && listenUsed_ >= 4) {
-    for (size_t i = 0; i + 3 < listenUsed_; i++) {
-      if (toupper(listenBuffer_[i]) != 'A' || toupper(listenBuffer_[i + 1]) != 'A') continue;
-      const char high = listenBuffer_[i + 2];
-      const char low = listenBuffer_[i + 3];
-      if (!isxdigit(high) || !isxdigit(low)) continue;
-      char text[3] = {high, low, '\0'};
-      trigger = static_cast<uint16_t>(strtol(text, nullptr, 16));
+  // 2) Messaggi testuali: si elaborano a fine riga oppure dopo una pausa sul bus,
+  //    perché "AA1" non ha una lunghezza fissa.
+  while (triggerCount < 4 && listenUsed_ > 0) {
+    size_t terminator = listenUsed_;
+    for (size_t i = 0; i < listenUsed_; i++) {
+      if (listenBuffer_[i] == '\r' || listenBuffer_[i] == '\n') {
+        terminator = i;
+        break;
+      }
+    }
+
+    const bool hasLine = terminator < listenUsed_;
+    const bool idle = (now - listenLastByteAt_) > 150;
+    if (!hasLine && !idle) break;  // messaggio ancora in arrivo
+
+    uint16_t scenario = 0;
+    if (parseAsciiScenario(listenBuffer_, terminator, scenario)) {
+      triggers[triggerCount++] = scenario;
+    }
+
+    if (hasLine) {
+      size_t consumed = terminator + 1;
+      while (consumed < listenUsed_ &&
+             (listenBuffer_[consumed] == '\r' || listenBuffer_[consumed] == '\n')) {
+        consumed++;
+      }
+      memmove(listenBuffer_, listenBuffer_ + consumed, listenUsed_ - consumed);
+      listenUsed_ -= consumed;
+    } else {
       listenUsed_ = 0;
-      break;
     }
   }
 
-  // Scarta i frammenti rimasti in sospeso da troppo tempo.
-  if (listenUsed_ > 0 && (now - listenLastByteAt_) > 500) listenUsed_ = 0;
-
   if (mutex_ != nullptr) xSemaphoreGive(mutex_);
 
-  if (trigger > 0) {
+  for (size_t i = 0; i < triggerCount; i++) {
     triggers_++;
-    lastTrigger_ = trigger;
-    log_i("Comando scenario dal bus: AA%02X", trigger);
-    trigger_(trigger);
+    lastTrigger_ = triggers[i];
+    log_i("Comando scenario dal bus: AA%02u", triggers[i]);
+    trigger_(triggers[i]);
   }
 }
 

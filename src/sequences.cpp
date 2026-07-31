@@ -152,7 +152,7 @@ bool startByBusTrigger(uint16_t trigger, String &error) {
     return false;
   }
   char label[16];
-  snprintf(label, sizeof(label), "bus AA%02X", trigger);
+  snprintf(label, sizeof(label), "bus AA%02u", trigger);
   return start(sequence->id, label, error);
 }
 

@@ -1185,7 +1185,7 @@
         details.push(sequence.schedule.entries.map((entry) => entry.time).join(", "));
       }
       if (sequence.busTrigger) {
-        details.push("bus AA" + Number(sequence.busTrigger).toString(16).toUpperCase().padStart(2, "0"));
+        details.push("bus AA" + String(sequence.busTrigger).padStart(2, "0"));
       }
       title.appendChild(el("div", "muted", details.join(" · ")));
       head.appendChild(title);
@@ -1240,7 +1240,7 @@
   function updateBusHint() {
     const value = Number($("sequence-bus").value || 0);
     $("sequence-bus-hint").textContent = value > 0
-      ? "Si avvia ricevendo AA" + value.toString(16).toUpperCase().padStart(2, "0") + " dal bus"
+      ? "Si avvia ricevendo AA" + String(value).padStart(2, "0") + " (o AA" + value + ") dal bus"
       : "Nessun comando bus associato";
   }
 
