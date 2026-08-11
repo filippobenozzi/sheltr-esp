@@ -103,6 +103,12 @@ interpreta. Serve a due cose:
 > **non inferiore** all'intervallo qui: è quello che il portale usa per decidere se
 > mostrare il banner "Dispositivo offline".
 
+Alla riconnessione il gateway pubblica `online` (retained) su `<istanza>/bridge/status` **prima** di
+ripubblicare configurazione e stati. Il portale usa quel messaggio, insieme al Last Will `offline`, per
+capire che c'è stata un'interruzione: lo stato che arriva subito dopo lo adotta in **silenzio**, senza
+inviare notifiche, perché è un riallineamento e non un elenco di eventi appena accaduti (dopo un
+blackout, per esempio, il modulo riparte con i relè a riposo).
+
 ## Come vengono trattati i frame
 
 Il bridge cloud è volutamente **trasparente**: il frame ricevuto viene inoltrato verbatim sul bus e la
