@@ -158,8 +158,25 @@ struct MqttCfg {
   uint16_t stateIntervalSec = 30;
 };
 
+// Come il gateway raggiunge il portale.
+//  - CloudTransport::Mqtt: rete propria (WiFi/Ethernet), client MQTT sul dispositivo;
+//  - CloudTransport::Usr: nessuna rete propria, la connettivita' la da' un modulo
+//    USR DR154 collegato in RS485 sulla seriale, che fa da ponte verso il broker.
+enum class CloudTransport : uint8_t { Mqtt = 0, Usr = 1 };
+
+// Collegamento seriale verso il modulo USR DR154 (di default la UART0, quella dei
+// pin di programmazione GPIO1/GPIO3).
+struct UsrLinkCfg {
+  int8_t tx = 1;
+  int8_t rx = 3;
+  int8_t de = -1;  // pin di direzione del transceiver RS485; -1 = automatico
+  uint32_t baud = 115200;
+};
+
 struct CloudCfg {
   bool enabled = false;
+  CloudTransport transport = CloudTransport::Mqtt;
+  UsrLinkCfg usr;
   String host;
   uint16_t port = 1883;
   String username;
@@ -175,6 +192,9 @@ struct CloudCfg {
   // Heartbeat verso il portale: ogni quanti secondi ripubblicare lo stato delle
   // schede, così il cloud sa che il gateway è vivo. 0 = disattivato.
   uint16_t heartbeatSec = 300;
+  // Codice di associazione da redimere: con il modulo USR il gateway non ha rete
+  // propria, quindi la richiesta viaggia sul collegamento seriale invece che via HTTPS.
+  String pendingClaimCode;
 };
 
 struct Config {

@@ -548,6 +548,15 @@ bool applyCloudSettings(JsonObjectConst input) {
         changed = true;
       }
     }
+    // Stanza assegnata dal portale: la adottiamo, cosi' le due interfacce mostrano
+    // la stessa organizzazione.
+    if (entry["room"].is<const char *>()) {
+      const String room = cleanText(toText(entry["room"], ""), "Senza stanza");
+      if (channel->room != room) {
+        channel->room = room;
+        changed = true;
+      }
+    }
     if (entry["profile"].is<JsonObjectConst>()) {
       parseProfile(entry["profile"], board->kind, channel->profile);
       changed = true;
@@ -584,6 +593,24 @@ bool applyCloudSettings(JsonObjectConst input) {
           changed = true;
         }
       }
+      if (entry["room"].is<const char *>()) {
+        const String room = cleanText(toText(entry["room"], ""), "Senza stanza");
+        if (target.room != room) {
+          target.room = room;
+          changed = true;
+        }
+      }
+    }
+  }
+
+  // Polling automatico delle schede: si imposta indifferentemente da qui
+  // (Sistema -> Bus) o dal portale, e il valore resta uno solo.
+  if (input["pollIntervalSec"].is<int>() || input["pollIntervalSec"].is<unsigned int>()) {
+    const uint16_t interval =
+        static_cast<uint16_t>(constrain(toInt(input["pollIntervalSec"], g_config.bus.pollIntervalSec), 0, 3600));
+    if (g_config.bus.pollIntervalSec != interval) {
+      g_config.bus.pollIntervalSec = interval;
+      changed = true;
     }
   }
 
@@ -765,6 +792,17 @@ bool applyJson(JsonObjectConst input, String &error) {
         static_cast<uint32_t>(cloud["settingsRevision"] | next.cloud.settingsRevision);
     next.cloud.heartbeatSec =
         constrain(toInt(cloud["heartbeatSec"], next.cloud.heartbeatSec), 0, 3600);
+    // Trasporto: rete propria oppure modulo USR DR154 sulla seriale.
+    const String transport = toText(cloud["transport"], next.cloud.transport == CloudTransport::Usr ? "usr" : "mqtt");
+    next.cloud.transport = (transport == "usr") ? CloudTransport::Usr : CloudTransport::Mqtt;
+    if (cloud["usr"].is<JsonObjectConst>()) {
+      JsonObjectConst usr = cloud["usr"].as<JsonObjectConst>();
+      next.cloud.usr.tx = static_cast<int8_t>(constrain(toInt(usr["tx"], next.cloud.usr.tx), -1, 48));
+      next.cloud.usr.rx = static_cast<int8_t>(constrain(toInt(usr["rx"], next.cloud.usr.rx), -1, 48));
+      next.cloud.usr.de = static_cast<int8_t>(constrain(toInt(usr["de"], next.cloud.usr.de), -1, 48));
+      next.cloud.usr.baud =
+          static_cast<uint32_t>(constrain(toInt(usr["baud"], next.cloud.usr.baud), 1200, 921600));
+    }
   }
 
   if (input["roomColors"].is<JsonObjectConst>()) {
@@ -889,6 +927,12 @@ void toJson(JsonObject out, bool includeSecrets) {
   cloud["portalUrl"] = current.cloud.portalUrl;
   cloud["settingsRevision"] = current.cloud.settingsRevision;
   cloud["heartbeatSec"] = current.cloud.heartbeatSec;
+  cloud["transport"] = current.cloud.transport == CloudTransport::Usr ? "usr" : "mqtt";
+  JsonObject usr = cloud["usr"].to<JsonObject>();
+  usr["tx"] = current.cloud.usr.tx;
+  usr["rx"] = current.cloud.usr.rx;
+  usr["de"] = current.cloud.usr.de;
+  usr["baud"] = current.cloud.usr.baud;
   cloud["configTopic"] = current.cloud.instanceId + "/config";
   cloud["commandTopic"] = current.cloud.instanceId + "/cmd";
   cloud["responseTopic"] = current.cloud.instanceId + "/pub";

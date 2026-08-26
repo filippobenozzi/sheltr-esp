@@ -10,6 +10,7 @@
 #include "protocol.h"
 #include "sequences.h"
 #include "settings.h"
+#include "usr_link.h"
 
 namespace mqtt {
 
@@ -47,6 +48,28 @@ String availabilityTopic(const cfg::Board &board) { return topicPrefix(board) + 
 String bridgeStatusTopic() { return cfg::config().mqtt.baseTopic + "/bridge/status"; }
 
 String cloudStatusTopic() { return cfg::config().cloud.instanceId + "/bridge/status"; }
+
+// Il portale si raggiunge in due modi: con il client MQTT del gateway (rete propria)
+// oppure attraverso il modulo USR DR154 sulla seriale. Da qui in giu' si ragiona per
+// sotto-topic (cmd, pub, config, settings, action, bridge/status): sono gli stessi
+// nomi nei due casi, cambia solo come viaggiano.
+bool cloudViaUsr() { return cfg::config().cloud.transport == cfg::CloudTransport::Usr; }
+
+// Pronto a parlare col portale. Con il modulo la seriale e' sempre "aperta": non
+// possiamo sapere dal gateway se il modulo sia connesso al broker, lo deduciamo
+// dalle conferme che il portale rimanda (usr::alive()).
+bool cloudReady() { return cloudViaUsr() ? usr::enabled() : g_cloud.connected(); }
+
+bool cloudPublishSub(const String &sub, const uint8_t *payload, size_t length, bool retain) {
+  if (cloudViaUsr()) return usr::send(sub, payload, length);
+  if (!g_cloud.connected()) return false;
+  const String topic = cfg::config().cloud.instanceId + "/" + sub;
+  return g_cloud.publish(topic.c_str(), payload, length, retain);
+}
+
+bool cloudPublishSub(const String &sub, const String &payload, bool retain) {
+  return cloudPublishSub(sub, reinterpret_cast<const uint8_t *>(payload.c_str()), payload.length(), retain);
+}
 
 void publishLocal(const String &topic, const String &payload, bool retain) {
   if (!g_local.connected()) return;
@@ -431,6 +454,10 @@ void cloudInstanceJson(JsonObject out) {
     roomColors[entry.first] = entry.second;
   }
 
+  // Polling automatico delle schede: il portale lo mostra e lo puo' cambiare, il
+  // valore resta uno solo fra dispositivo e cloud.
+  out["pollIntervalSec"] = current.bus.pollIntervalSec;
+
   JsonObject mqttInfo = out["mqtt"].to<JsonObject>();
   mqttInfo["baseTopic"] = current.cloud.instanceId;
   mqttInfo["configTopic"] = current.cloud.instanceId + "/config";
@@ -441,11 +468,27 @@ void cloudInstanceJson(JsonObject out) {
 }
 
 void publishCloudConfig() {
-  if (!g_cloud.connected()) return;
+  if (!cloudReady()) return;
   JsonDocument doc(&SpiRamAllocator::instance());
   JsonObject root = doc.to<JsonObject>();
   cloudInstanceJson(root);
   const size_t length = measureJson(doc);
+
+  if (cloudViaUsr()) {
+    // Sul collegamento seriale il messaggio viene spezzato in trame dal codec: qui
+    // serve tutto insieme in memoria (la configurazione sta in PSRAM).
+    String payload;
+    payload.reserve(length + 1);
+    serializeJson(doc, payload);
+    if (!usr::send("config", payload)) {
+      log_w("Configurazione non inviata sul collegamento USR");
+      return;
+    }
+    g_cloudConfigPublished = true;
+    log_i("Configurazione Sheltr Cloud inviata via USR DR154 (%u byte)", static_cast<unsigned>(length));
+    return;
+  }
+
   const String topic = cfg::config().cloud.instanceId + "/config";
   if (!g_cloud.beginPublish(topic.c_str(), length, true)) {
     log_w("Publish configurazione cloud fallita");
@@ -474,9 +517,7 @@ void handleCloudCommand(const uint8_t *payload, unsigned int length) {
     return;
   }
   const String out = protocol::formatPayload(response, cfg::config().cloud.payloadFormat);
-  const String topic = cfg::config().cloud.instanceId + "/pub";
-  g_cloud.publish(topic.c_str(), reinterpret_cast<const uint8_t *>(out.c_str()), out.length(),
-                  false);
+  cloudPublishSub("pub", out, false);
 }
 
 void onLocalMessage(char *topic, uint8_t *payload, unsigned int length) {
@@ -535,9 +576,8 @@ void handleCloudAction(const uint8_t *payload, unsigned int length) {
 // interpreta per aggiornare le card, tenere il dispositivo "online" e inviare le
 // notifiche di cambio stato. Usata sia dall'heartbeat sia dopo un comando locale.
 void publishCloudBoardStates() {
-  if (!g_cloud.connected()) return;
+  if (!cloudReady()) return;
   const cfg::Config &current = cfg::config();
-  const String topic = current.cloud.instanceId + "/pub";
   for (uint8_t address : cfg::allAddresses()) {
     uint8_t frame[protocol::FRAME_LEN];
     const uint8_t g[1] = {0};
@@ -549,9 +589,8 @@ void publishCloudBoardStates() {
       continue;
     }
     const String out = protocol::formatPayload(response, current.cloud.payloadFormat);
-    g_cloud.publish(topic.c_str(), reinterpret_cast<const uint8_t *>(out.c_str()), out.length(),
-                    false);
-    g_cloud.loop();  // svuota il buffer fra una scheda e l'altra
+    cloudPublishSub("pub", out, false);
+    if (!cloudViaUsr()) g_cloud.loop();  // svuota il buffer fra una scheda e l'altra
   }
 }
 
@@ -568,6 +607,99 @@ void onCloudMessage(char *topic, uint8_t *payload, unsigned int length) {
   if (instanceId + "/action" == topic) {
     handleCloudAction(payload, length);
   }
+}
+
+// --- Collegamento attraverso il modulo USR DR154 ---------------------------
+
+uint32_t g_nextClaimAttempt = 0;
+
+// Ci si presenta al portale: `online` sul sotto-topic di presenza (il portale lo
+// ripubblica retained come farebbe il Last Will) e subito dopo la configurazione.
+void announceCloudPresence() {
+  if (!usr::send("bridge/status", "online")) return;
+  g_cloudConfigPublished = false;
+  log_i("Presenza inviata al portale attraverso il modulo USR");
+}
+
+// Associazione senza rete propria: il codice viaggia sul collegamento seriale.
+// Si insiste finche' il portale non risponde, perche' il modulo potrebbe non essere
+// ancora collegato al broker quando l'utente preme "Abbina".
+void sendPendingClaim(uint32_t now) {
+  cfg::Config &current = cfg::config();
+  if (!current.cloud.pendingClaimCode.length()) return;
+  if (static_cast<int32_t>(now - g_nextClaimAttempt) < 0) return;
+  g_nextClaimAttempt = now + 10000;
+
+  JsonDocument doc;
+  JsonObject root = doc.to<JsonObject>();
+  root["code"] = current.cloud.pendingClaimCode;
+  JsonObject device = root["device"].to<JsonObject>();
+  device["type"] = "sheltr_esp";
+  device["board"] = SHELTR_BOARD_NAME;
+  device["firmware"] = SHELTR_FW_VERSION;
+  device["mac"] = WiFi.macAddress();
+  String payload;
+  serializeJson(doc, payload);
+  usr::send("claim", payload);
+  log_i("Richiesta di associazione inviata attraverso il modulo USR");
+}
+
+// Risposta del portale all'associazione: da qui il gateway impara chi e'.
+void handleClaimResult(const uint8_t *payload, size_t length) {
+  JsonDocument doc;
+  if (deserializeJson(doc, payload, length)) {
+    log_w("Risposta di associazione non leggibile");
+    return;
+  }
+  cfg::Config &current = cfg::config();
+  if (!doc["ok"].as<bool>()) {
+    current.cloud.pendingClaimCode = "";
+    cfg::save();
+    log_w("Associazione rifiutata dal portale: %s",
+          doc["error"].is<const char *>() ? doc["error"].as<const char *>() : "codice non valido");
+    return;
+  }
+  const String instanceId = cfg::slugify(
+      doc["instanceId"].is<const char *>() ? String(doc["instanceId"].as<const char *>()) : String(),
+      current.cloud.instanceId);
+  if (instanceId.length()) current.cloud.instanceId = instanceId;
+  if (doc["instanceName"].is<const char *>()) {
+    current.cloud.instanceName = String(doc["instanceName"].as<const char *>());
+  }
+  if (doc["payloadFormat"].is<const char *>()) {
+    current.cloud.payloadFormat = String(doc["payloadFormat"].as<const char *>());
+  }
+  if (doc["pollIntervalSec"].is<int>()) {
+    current.bus.pollIntervalSec = static_cast<uint16_t>(constrain(doc["pollIntervalSec"].as<int>(), 0, 3600));
+  }
+  current.cloud.pendingClaimCode = "";
+  current.cloud.enabled = true;
+  cfg::save();
+  log_i("Associato al portale come istanza '%s'", current.cloud.instanceId.c_str());
+  g_cloudConfigPublished = false;
+  publishCloudConfig();
+}
+
+// Messaggi che arrivano dal portale attraverso il modulo: stessi sotto-topic del
+// collegamento diretto, stessa gestione.
+void onUsrMessage(const String &sub, const uint8_t *payload, size_t length) {
+  if (sub == "cmd") {
+    handleCloudCommand(payload, static_cast<unsigned int>(length));
+    return;
+  }
+  if (sub == "settings") {
+    handleCloudSettings(payload, static_cast<unsigned int>(length));
+    return;
+  }
+  if (sub == "action") {
+    handleCloudAction(payload, static_cast<unsigned int>(length));
+    return;
+  }
+  if (sub == "claimed") {
+    handleClaimResult(payload, length);
+    return;
+  }
+  // "ack": serve solo a sapere che il portale c'e', se ne occupa usr_link.
 }
 
 void connectLocal() {
@@ -648,11 +780,15 @@ void connectCloud() {
 void begin() {
   g_nextLocalAttempt = millis() + 3000;
   g_nextCloudAttempt = millis() + 5000;
+  usr::begin(onUsrMessage);
+  if (cloudViaUsr()) announceCloudPresence();
 }
 
 void reload() {
   if (g_local.connected()) g_local.disconnect();
   if (g_cloud.connected()) g_cloud.disconnect();
+  usr::reload();
+  if (cloudViaUsr()) announceCloudPresence();
   g_discoveryPublished = false;
   g_cloudConfigPublished = false;
   g_nextLocalAttempt = millis() + 500;
@@ -670,7 +806,7 @@ void publishStates() {
 void publishConfig() { publishCloudConfig(); }
 
 void publishInputEvent(size_t index) {
-  if (!g_cloud.connected()) return;
+  if (!cloudReady()) return;
   const std::vector<cfg::InputCfg> &inputs = cfg::config().inputs;
   if (index >= inputs.size()) return;
   const cfg::InputCfg &item = inputs[index];
@@ -686,9 +822,7 @@ void publishInputEvent(size_t index) {
   root["active"] = true;
   String payload;
   serializeJson(doc, payload);
-  const String topic = cfg::config().cloud.instanceId + "/event";
-  g_cloud.publish(topic.c_str(), reinterpret_cast<const uint8_t *>(payload.c_str()), payload.length(),
-                  false);
+  cloudPublishSub("event", payload, false);
 }
 
 void loop() {
@@ -706,10 +840,25 @@ void loop() {
     g_local.disconnect();
   }
 
-  if (current.cloud.enabled && current.cloud.host.length() && net::online()) {
-    if (g_cloud.connected()) {
-      g_cloud.loop();
+  // Collegamento seriale al modulo USR: non c'e' nessuna rete da aspettare, la
+  // seriale si legge sempre.
+  if (cloudViaUsr()) {
+    usr::loop();
+  }
+
+  const bool cloudWanted =
+      current.cloud.enabled && (cloudViaUsr() || (current.cloud.host.length() && net::online()));
+  if (cloudWanted) {
+    if (cloudReady()) {
+      if (!cloudViaUsr()) g_cloud.loop();
+      // Con il modulo USR ci si ripresenta finche' il portale non risponde: e' l'unico
+      // modo per sapere che il ponte funziona davvero.
+      if (cloudViaUsr() && !usr::alive() && static_cast<int32_t>(now - g_nextCloudAttempt) > 0) {
+        g_nextCloudAttempt = now + 15000;
+        announceCloudPresence();
+      }
       if (!g_cloudConfigPublished) publishCloudConfig();
+      if (cloudViaUsr()) sendPendingClaim(now);
 
       // Qualcosa è cambiato in locale (comando dall'interfaccia, ingresso, sequenza,
       // profilo orario): avvisiamo il portale così si aggiorna e, se il canale ha la
@@ -730,7 +879,7 @@ void loop() {
         publishCloudBoardStates();
         g_cloudPublishedRevision = devices::stateRevision();
       }
-    } else if (static_cast<int32_t>(now - g_nextCloudAttempt) > 0) {
+    } else if (!cloudViaUsr() && static_cast<int32_t>(now - g_nextCloudAttempt) > 0) {
       g_nextCloudAttempt = now + 10000;
       connectCloud();
     }
@@ -750,7 +899,9 @@ void loop() {
 }
 
 bool localConnected() { return g_local.connected(); }
-bool cloudConnected() { return g_cloud.connected(); }
+// Col modulo USR "connesso" vuol dire che il portale ci sta rispondendo: la seriale
+// aperta da sola non dimostra nulla.
+bool cloudConnected() { return cloudViaUsr() ? usr::alive() : g_cloud.connected(); }
 
 void statusJson(JsonObject out) {
   const cfg::Config &current = cfg::config();
@@ -768,7 +919,7 @@ void statusJson(JsonObject out) {
 
   JsonObject cloud = out["cloud"].to<JsonObject>();
   cloud["enabled"] = current.cloud.enabled;
-  cloud["connected"] = g_cloud.connected();
+  cloud["connected"] = cloudConnected();
   cloud["host"] = current.cloud.host;
   cloud["port"] = current.cloud.port;
   cloud["instanceId"] = current.cloud.instanceId;
@@ -779,6 +930,9 @@ void statusJson(JsonObject out) {
   cloud["configPublished"] = g_cloudConfigPublished;
   cloud["failures"] = g_cloudFailures;
   cloud["lastError"] = g_cloudError;
+  cloud["transport"] = cloudViaUsr() ? "usr" : "mqtt";
+  cloud["pendingClaim"] = current.cloud.pendingClaimCode.length() > 0;
+  usr::statusJson(cloud["usr"].to<JsonObject>());
 }
 
 }  // namespace mqtt

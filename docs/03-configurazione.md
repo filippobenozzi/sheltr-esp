@@ -211,7 +211,9 @@ curl -X POST http://sheltr.local/api/sequences/buonanotte/run
 
 Otto contatti fisici possono avviare una sequenza.
 
-- In *Sistema → Ingressi digitali* si scelgono **GPIO, pull-up, verso del contatto e antirimbalzo**.
+- In *Sistema → Ingressi digitali* si scelgono **GPIO, pull-up, verso del contatto, antirimbalzo** e la
+  **notifica da mandare al portale allo scatto**, con testo libero (vuoto = testo predefinito). Notifica
+  e testo si sincronizzano col portale nei due sensi: la notifica vera la invia lui.
   I GPIO predefiniti sono `1, 2, 21, 38, 39, 40, 41, 47`, tutti liberi sui connettori della scheda.
 - In *Configurazione → Ingressi* si assegnano **nome, stanza, preferito e sequenza da avviare**.
 
@@ -261,7 +263,9 @@ Si configura da *Sistema → Bus seriale* (sezione protetta da password).
 | Polling automatico | 60 s | 0 disattiva il polling ciclico |
 
 Il polling ciclico interroga tutte le schede con il comando `0x40` e tiene aggiornati interfaccia, MQTT e
-Home Assistant anche quando i comandi arrivano da pulsanti fisici.
+Home Assistant anche quando i comandi arrivano da pulsanti fisici. Lo stesso intervallo si imposta anche
+dal portale (*Config → istanza → Polling automatico delle schede*): il valore è uno solo e si sincronizza
+nei due sensi.
 
 ## Sicurezza
 

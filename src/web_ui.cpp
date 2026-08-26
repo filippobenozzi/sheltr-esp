@@ -522,6 +522,31 @@ void handleCloudClaim() {
   portalUrl.trim();
   code.trim();
   while (portalUrl.endsWith("/")) portalUrl.remove(portalUrl.length() - 1);
+
+  // Con il modulo USR DR154 il gateway non ha rete propria: il codice non puo'
+  // viaggiare via HTTPS, lo manda il ponte sul collegamento seriale (e insiste
+  // finche' il portale non risponde, perche' il modulo potrebbe non essere ancora
+  // collegato al broker).
+  if (cfg::config().cloud.transport == cfg::CloudTransport::Usr) {
+    if (!code.length()) {
+      sendError(400, F("Specifica il codice di associazione"));
+      return;
+    }
+    cfg::config().cloud.pendingClaimCode = code;
+    cfg::config().cloud.enabled = true;
+    if (!cfg::save()) {
+      sendError(500, F("Salvataggio configurazione fallito"));
+      return;
+    }
+    mqtt::reload();
+    JsonDocument out(&SpiRamAllocator::instance());
+    out["ok"] = true;
+    out["pending"] = true;
+    out["message"] = F("Richiesta inviata al portale attraverso il modulo USR DR154");
+    sendJson(200, out);
+    return;
+  }
+
   if (!portalUrl.length() || !code.length()) {
     sendError(400, F("Specifica l'URL del portale e il codice di associazione"));
     return;

@@ -104,12 +104,17 @@
   .dot-thermo { width: 0.625rem; height: 0.625rem; border-radius: 999px; background: #d4d4d4; flex-shrink: 0; }
   .dot-thermo.active { background: #3b82f6; box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25); }
 
-  /* Attività sul bus: appare solo mentre il canale scambia comandi. */
+  /* Esito del comando sul canale: giallo pulsante mentre il segnale è partito e
+     aspetta risposta, verde quando la scheda conferma, rosso quando non risponde
+     (in quel caso lo stato mostrato resta quello letto, non quello comandato). */
   .dot-bus {
-    width: 0.5rem; height: 0.5rem; border-radius: 999px; flex-shrink: 0;
-    background: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.22);
+    width: 0.75rem; height: 0.75rem; border-radius: 999px; flex-shrink: 0;
+    background: #16a34a; box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.3);
     animation: pulse 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
   }
+  .dot-bus.sending { background: #f59e0b; box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.3); }
+  .dot-bus.ok { background: #10b981; box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3); animation: none; }
+  .dot-bus.failed { background: #dc2626; box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.3); animation: none; }
   .pulse { animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite; }
   @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
 
@@ -243,7 +248,7 @@
 
     <section class="panel">
       <h2>Ingressi</h2>
-      <p class="muted">Assegna a ogni ingresso un nome, una stanza e la sequenza da avviare. I parametri elettrici (GPIO, pull-up, antirimbalzo) si impostano in Sistema.</p>
+      <p class="muted">Assegna a ogni ingresso un nome, una stanza e la sequenza da avviare. Parametri elettrici (GPIO, pull-up, antirimbalzo) e notifica al portale si impostano in Sistema.</p>
       <table id="inputs-assign"></table>
     </section>
 
@@ -279,7 +284,25 @@
       <h2>Sheltr Cloud</h2>
       <p class="muted">Associa il dispositivo a un'istanza del portale con un <strong>codice</strong>: broker, credenziali e ID istanza vengono configurati in automatico.</p>
       <div class="fields" style="margin-top:0.5rem">
-        <div class="field"><label for="cfg-cloud-portal">URL portale</label><input id="cfg-cloud-portal" type="text" placeholder="https://cloud.miodominio.it" autocomplete="off" /></div>
+        <div class="field">
+          <label for="cfg-cloud-transport">Come raggiunge il portale</label>
+          <select id="cfg-cloud-transport">
+            <option value="mqtt">Rete propria (WiFi / Ethernet)</option>
+            <option value="usr">Modulo USR DR154 (RS485)</option>
+          </select>
+        </div>
+      </div>
+      <div id="cloud-usr-panel" class="hidden">
+        <p class="muted" style="margin-top:0.5rem">Il dispositivo non ha rete propria: scrive sulla seriale e il modulo USR DR154 fa da ponte verso il broker del portale. Nel modulo vanno messi broker, credenziali e i due topic che il portale mostra in <em>Config → istanza → Collegamento del gateway</em>. Qui basta il codice di associazione.</p>
+        <div class="fields" style="margin-top:0.5rem">
+          <div class="field"><label for="cfg-usr-tx">TX verso il modulo (GPIO)</label><input id="cfg-usr-tx" type="number" min="-1" max="48" /></div>
+          <div class="field"><label for="cfg-usr-rx">RX dal modulo (GPIO)</label><input id="cfg-usr-rx" type="number" min="-1" max="48" /></div>
+          <div class="field"><label for="cfg-usr-de">DE/RE del transceiver (-1 = automatico)</label><input id="cfg-usr-de" type="number" min="-1" max="48" /></div>
+          <div class="field"><label for="cfg-usr-baud">Baud</label><input id="cfg-usr-baud" type="number" min="1200" max="921600" /></div>
+        </div>
+      </div>
+      <div class="fields" style="margin-top:0.5rem">
+        <div class="field" id="cloud-portal-field"><label for="cfg-cloud-portal">URL portale</label><input id="cfg-cloud-portal" type="text" placeholder="https://cloud.miodominio.it" autocomplete="off" /></div>
         <div class="field"><label for="cfg-cloud-code">Codice di associazione</label><input id="cfg-cloud-code" type="text" placeholder="SHLTR-XXXXX-XXXXX-XXXXX" autocomplete="off" /></div>
       </div>
       <div class="row" style="margin-top:0.5rem">
@@ -391,7 +414,7 @@
 
       <section class="panel">
         <h2>Ingressi digitali</h2>
-        <p class="muted">Otto contatti che avviano una sequenza. Qui si scelgono i GPIO e i parametri elettrici; la sequenza da avviare si assegna dal Controllo.</p>
+        <p class="muted">Otto contatti che avviano una sequenza. Qui si scelgono i GPIO, i parametri elettrici e la notifica da mandare al portale allo scatto (con testo libero); la sequenza da avviare si assegna dal Controllo.</p>
         <table id="inputs-table"></table>
       </section>
 
@@ -567,6 +590,7 @@
 
   const state = {
     activity: new Map(),  // id -> istante dell'ultimo comando inviato da questa pagina
+    commandResult: new Map(),  // id -> sending | ok | failed (esito dell'ultimo comando)
     pendingSetpoint: new Map(),  // id termostato -> {value, timer} in attesa di invio
     meta: null,
     status: null,
@@ -717,14 +741,28 @@
     if (state.busy.has(key)) return;
     state.busy.add(key);
     state.activity.set(id, Date.now());
+    // Il segnale è partito: da qui in poi il pallino racconta com'è finita.
+    state.commandResult.set(id, "sending");
     scheduleActivityRefresh();
     renderControl();
     try {
       await api(path, { method: "POST", body });
+      state.commandResult.set(id, "ok");
+      // Il verde è una conferma, non uno stato: sparisce da solo.
+      setTimeout(() => {
+        if (state.commandResult.get(id) === "ok") {
+          state.commandResult.delete(id);
+          if (state.view === "control") renderControl();
+        }
+      }, 2500);
       toast(label + " eseguito");
       await loadStatus(false);
     } catch (error) {
+      // Nessuna risposta dalla scheda: il comando non è confermato e lo stato
+      // mostrato resta quello letto davvero, non quello che abbiamo chiesto.
+      state.commandResult.set(id, "failed");
       toast(label + ": " + error.message, true);
+      await loadStatus(false).catch(() => {});
     } finally {
       state.busy.delete(key);
       renderControl();
@@ -770,6 +808,17 @@
     return typeof item.busActivityAgoMs === "number" && item.busActivityAgoMs < ACTIVITY_WINDOW_MS;
   }
 
+  // Classe e spiegazione del pallino: l'esito dell'ultimo comando se c'è,
+  // altrimenti la semplice attività sul bus.
+  function busDot(item) {
+    const result = state.commandResult.get(item.id);
+    if (result === "sending") return { cls: "dot-bus sending", title: "Segnale inviato, in attesa della risposta" };
+    if (result === "ok") return { cls: "dot-bus ok", title: "Comando confermato dalla scheda" };
+    if (result === "failed") return { cls: "dot-bus failed", title: "Nessuna risposta dalla scheda: comando non confermato" };
+    if (busActive(item)) return { cls: "dot-bus", title: "Scambio in corso sul bus" };
+    return null;
+  }
+
   function tileHead(item, showRoom, withProfile = true) {
     const head = el("div", "tile-head");
     const left = el("div");
@@ -780,9 +829,10 @@
     title.style.alignItems = "center";
     title.style.gap = "0.375rem";
     title.appendChild(el("span", null, item.name));
-    if (busActive(item)) {
-      const activity = el("span", "dot-bus");
-      activity.title = "Scambio in corso sul bus";
+    const dot = busDot(item);
+    if (dot) {
+      const activity = el("span", dot.cls);
+      activity.title = dot.title;
       title.appendChild(activity);
     }
     left.appendChild(title);
@@ -1626,6 +1676,13 @@
     $("cfg-cloud-format").value = config.cloud.payloadFormat || "frame_hex_space_crlf";
     if (!$("cfg-cloud-portal").value) $("cfg-cloud-portal").value = config.cloud.portalUrl || "";
     $("cfg-cloud-heartbeat").value = config.cloud.heartbeatSec;
+    $("cfg-cloud-transport").value = config.cloud.transport === "usr" ? "usr" : "mqtt";
+    const usr = config.cloud.usr || {};
+    $("cfg-usr-tx").value = usr.tx !== undefined ? usr.tx : 1;
+    $("cfg-usr-rx").value = usr.rx !== undefined ? usr.rx : 3;
+    $("cfg-usr-de").value = usr.de !== undefined ? usr.de : -1;
+    $("cfg-usr-baud").value = usr.baud || 115200;
+    updateCloudTransport();
     updateCloudTopics();
 
     // sezione Sistema
@@ -1679,7 +1736,8 @@
     table.innerHTML = "";
     const inputs = (state.config && state.config.inputs) || [];
     const header = document.createElement("tr");
-    for (const label of ["#", "Nome", "Attivo", "GPIO", "Pull-up", "Contatto", "Antirimbalzo (ms)", "Sequenza"]) {
+    for (const label of ["#", "Nome", "Attivo", "GPIO", "Pull-up", "Contatto", "Antirimbalzo (ms)",
+                         "Notifica", "Testo notifica", "Sequenza"]) {
       header.appendChild(el("th", null, label));
     }
     table.appendChild(header);
@@ -1723,6 +1781,18 @@
       debounceCell.appendChild(numberInput(item.debounceMs, 5, 2000, 5, (value) => { item.debounceMs = value; }));
       row.appendChild(debounceCell);
 
+      // Notifica allo scatto: la invia il portale, qui si sceglie se e con che testo.
+      // Si sincronizza con il cloud nei due sensi.
+      const notifyCell = document.createElement("td");
+      const notify = document.createElement("input");
+      notify.type = "checkbox";
+      notify.checked = Boolean(item.notifyOnChange);
+      notify.addEventListener("change", () => { item.notifyOnChange = notify.checked; });
+      notifyCell.appendChild(notify);
+      row.appendChild(notifyCell);
+      row.appendChild(inputCell(item.notifyText || "", (value) => { item.notifyText = value; },
+        "Vuoto = testo predefinito"));
+
       const sequence = (state.config.sequences || []).find((entry) => entry.id === item.sequenceId);
       row.appendChild(el("td", "muted", sequence ? sequence.name : "— dal Controllo —"));
       table.appendChild(row);
@@ -1741,7 +1811,7 @@
     }
 
     const header = document.createElement("tr");
-    for (const label of ["#", "Nome", "Stanza", "Preferito", "Sequenza", "Notifica", "Testo notifica", "Stato"]) {
+    for (const label of ["#", "Nome", "Stanza", "Preferito", "Sequenza", "Stato"]) {
       header.appendChild(el("th", null, label));
     }
     table.appendChild(header);
@@ -1779,17 +1849,6 @@
       select.addEventListener("change", () => { item.sequenceId = select.value; });
       sequenceCell.appendChild(select);
       row.appendChild(sequenceCell);
-
-      // Notifica allo scatto: la invia il portale, qui si sceglie se e con che testo.
-      const notifyCell = document.createElement("td");
-      const notify = document.createElement("input");
-      notify.type = "checkbox";
-      notify.checked = Boolean(item.notifyOnChange);
-      notify.addEventListener("change", () => { item.notifyOnChange = notify.checked; });
-      notifyCell.appendChild(notify);
-      row.appendChild(notifyCell);
-      row.appendChild(inputCell(item.notifyText || "", (value) => { item.notifyText = value; },
-        "Testo libero (vuoto = predefinito)"));
 
       const live = ((state.status && state.status.inputs) || []).find((entry) => entry.index === index);
       row.appendChild(el("td", "muted", disabled ? "disattivato in Sistema"
@@ -1866,7 +1925,11 @@
 
   function updateCloudTopics() {
     const instance = $("cfg-cloud-instance").value || "sheltr-esp";
-    $("cfg-cloud-topics").textContent = instance + "/config · " + instance + "/cmd · " + instance + "/pub";
+    // Con il modulo USR i topic sono due soli: dentro viaggiano gli stessi
+    // sotto-topic del collegamento diretto (cmd, pub, config, settings, action).
+    $("cfg-cloud-topics").textContent = $("cfg-cloud-transport").value === "usr"
+      ? instance + "/link/up · " + instance + "/link/down (da impostare nel modulo USR)"
+      : instance + "/config · " + instance + "/cmd · " + instance + "/pub";
   }
 
   function collectConfig() {
@@ -1893,6 +1956,13 @@
     config.cloud.instanceName = $("cfg-cloud-instance-name").value;
     config.cloud.payloadFormat = $("cfg-cloud-format").value;
     config.cloud.heartbeatSec = Number($("cfg-cloud-heartbeat").value);
+    config.cloud.transport = $("cfg-cloud-transport").value === "usr" ? "usr" : "mqtt";
+    config.cloud.usr = {
+      tx: Number($("cfg-usr-tx").value),
+      rx: Number($("cfg-usr-rx").value),
+      de: Number($("cfg-usr-de").value),
+      baud: Number($("cfg-usr-baud").value),
+    };
     if ($("cfg-cloud-pass").value) config.cloud.password = $("cfg-cloud-pass").value;
     else delete config.cloud.password;
 
@@ -1960,21 +2030,37 @@
     }
   }
 
+  // Con il modulo USR non serve l'URL del portale (il dispositivo non naviga):
+  // il codice viaggia sul collegamento seriale.
+  function updateCloudTransport() {
+    const usr = $("cfg-cloud-transport").value === "usr";
+    $("cloud-usr-panel").classList.toggle("hidden", !usr);
+    $("cloud-portal-field").classList.toggle("hidden", usr);
+    updateCloudTopics();
+  }
+
   async function claimCloud() {
     const button = $("btn-cloud-claim");
     const hint = $("cloud-claim-hint");
+    const viaUsr = $("cfg-cloud-transport").value === "usr";
     const portalUrl = $("cfg-cloud-portal").value.trim();
     const code = $("cfg-cloud-code").value.trim();
-    if (!portalUrl || !code) {
-      toast("Inserisci URL portale e codice di associazione", true);
+    if (!code || (!viaUsr && !portalUrl)) {
+      toast(viaUsr ? "Inserisci il codice di associazione" : "Inserisci URL portale e codice di associazione", true);
       return;
     }
     button.disabled = true;
     hint.textContent = "Associazione in corso…";
     try {
       const data = await api("/api/cloud/claim", { method: "POST", body: { portalUrl, code } });
-      hint.textContent = "Associato a " + (data.instanceName || data.instanceId || "portale");
-      toast("Dispositivo associato al portale");
+      if (data.pending) {
+        // Il portale risponde attraverso il modulo: l'esito arriva sulla seriale.
+        hint.textContent = "Richiesta inviata attraverso il modulo USR DR154…";
+        toast("Richiesta di associazione inviata: attendi la risposta del portale");
+      } else {
+        hint.textContent = "Associato a " + (data.instanceName || data.instanceId || "portale");
+        toast("Dispositivo associato al portale");
+      }
       $("cfg-cloud-code").value = "";
       await loadConfig();
       await loadStatus(false);
@@ -2245,6 +2331,7 @@
     $("btn-reload-config").addEventListener("click", () => loadConfig().catch((error) => toast(error.message, true)));
     $("cfg-cloud-instance").addEventListener("input", updateCloudTopics);
     $("btn-cloud-claim").addEventListener("click", claimCloud);
+    $("cfg-cloud-transport").addEventListener("change", updateCloudTransport);
 
     $("btn-scan").addEventListener("click", async () => {
       $("btn-scan").disabled = true;
