@@ -1,6 +1,7 @@
 #include "inputs.h"
 
 #include "mqtt_bridge.h"
+#include "notifier.h"
 #include "sequences.h"
 #include "settings.h"
 
@@ -79,8 +80,10 @@ void loop() {
     state.triggerCount++;
     state.lastTriggerAt = now;
     // L'evento va al portale a prescindere dalla sequenza collegata: se l'ingresso
-    // ha la notifica attiva, sara' il cloud a inviarla.
+    // ha la notifica attiva, sara' il cloud a inviarla. Se il portale non c'e',
+    // ci pensa il gateway via email.
     mqtt::publishInputEvent(i);
+    notifier::inputTriggered(i);
     if (!item.sequenceId.length()) {
       log_i("Ingresso %u attivato: nessuna sequenza assegnata", static_cast<unsigned>(i + 1));
       continue;

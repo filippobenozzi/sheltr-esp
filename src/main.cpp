@@ -7,6 +7,7 @@
 #include "metrics.h"
 #include "mqtt_bridge.h"
 #include "net_manager.h"
+#include "notifier.h"
 #include "rtc.h"
 #include "schedules.h"
 #include "sequences.h"
@@ -43,6 +44,7 @@ void setup() {
   webserver::begin();
   updater::begin();
   mqtt::begin();
+  notifier::begin();
 
   Serial.printf("Interfaccia locale: http://%s.local\n", cfg::config().network.hostname.c_str());
 }
@@ -60,6 +62,7 @@ void loop() {
   sequences::loop();
   rtc::loop();
   updater::loop();
+  notifier::loop();
 
   metrics::sample(micros() - startedAt);
   delay(2);  // lascia girare il task idle (watchdog) e le attività di rete

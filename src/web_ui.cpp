@@ -14,6 +14,7 @@
 #include "json_utils.h"
 #include "metrics.h"
 #include "mqtt_bridge.h"
+#include "mailer.h"
 #include "net_manager.h"
 #include "rtc.h"
 #include "schedules.h"
@@ -868,6 +869,7 @@ void systemJson(JsonObject out) {
 
   net::statusJson(out["network"].to<JsonObject>());
   mqtt::statusJson(out["mqtt"].to<JsonObject>());
+  mailer::statusJson(out["email"].to<JsonObject>());
 
   JsonObject bus = out["bus"].to<JsonObject>();
   bus["tx"] = Bus.txPin();
@@ -899,6 +901,28 @@ void handleSystem() {
   JsonDocument doc(&SpiRamAllocator::instance());
   JsonObject root = doc.to<JsonObject>();
   systemJson(root);
+  sendJson(200, doc);
+}
+
+void handleEmailTest() {
+  if (!requireSystem()) return;
+  JsonDocument body(&SpiRamAllocator::instance());
+  if (!readBody(body)) return;
+  const String to = bodyString(body, "to", cfg::config().email.recipients);
+  if (to.indexOf('@') <= 0) {
+    sendError(400, F("Indica almeno un indirizzo a cui mandare la prova"));
+    return;
+  }
+  String error;
+  const String body_text = String(F("Notifica di prova da ")) + cfg::config().device.name +
+                           F("\r\n\r\nSe leggi questo messaggio, il server di posta e' configurato bene.");
+  if (!mailer::sendNow(F("Sheltr ESP - prova invio"), body_text, to, error)) {
+    sendError(502, String(F("Invio non riuscito: ")) + error);
+    return;
+  }
+  JsonDocument doc(&SpiRamAllocator::instance());
+  doc["ok"] = true;
+  doc["to"] = to;
   sendJson(200, doc);
 }
 
@@ -1224,6 +1248,7 @@ void registerRoutes() {
   g_server.on("/api/inputs", HTTP_POST, handleInputAssign);
   g_server.on("/api/inputs", HTTP_PUT, handleInputAssign);
   g_server.on("/api/system/rtc", HTTP_POST, handleRtcAction);
+  g_server.on("/api/system/email/test", HTTP_POST, handleEmailTest);
   g_server.on("/api/system/update", HTTP_GET, handleUpdateStatus);
   g_server.on("/api/system/update/check", HTTP_POST, handleUpdateCheck);
   g_server.on("/api/system/update/install", HTTP_POST, handleUpdateInstall);

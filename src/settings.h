@@ -204,6 +204,25 @@ struct CloudCfg {
   String pendingClaimCode;
 };
 
+// Notifiche via email mandate dal gateway stesso. Servono quando non c'e' il
+// portale: se il gateway e' collegato a Sheltr Cloud le notifiche le manda lui
+// (conosce gli indirizzi di tutti gli utenti), altrimenti — se c'e' internet — le
+// manda il gateway a questi indirizzi.
+struct EmailCfg {
+  bool enabled = false;
+  String host;
+  uint16_t port = 587;
+  // ssl = TLS diretto (di solito porta 465), none = nessuna cifratura.
+  // STARTTLS non c'e': non si puo' cifrare una connessione gia' aperta con la
+  // libreria TLS dell'ESP32.
+  String security = "ssl";
+  String username;
+  String password;
+  String from;
+  String fromName = "Sheltr ESP";
+  String recipients;  // uno o piu' indirizzi separati da virgola
+};
+
 struct Config {
   DeviceCfg device;
   AuthCfg auth;
@@ -214,6 +233,7 @@ struct Config {
   UpdateCfg update;
   MqttCfg mqtt;
   CloudCfg cloud;
+  EmailCfg email;
   std::map<String, String> roomColors;
   std::vector<Board> boards;
   std::vector<Sequence> sequences;

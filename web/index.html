@@ -524,6 +524,34 @@
       </section>
 
       <section class="panel">
+        <h2>Notifiche email</h2>
+        <p class="muted">Se il dispositivo è collegato a Sheltr Cloud le notifiche le manda il portale. Se il portale non c'è (non configurato o irraggiungibile) ma c'è internet, le manda il dispositivo a questi indirizzi: così non arrivano doppioni e non si resta scoperti.</p>
+        <div class="switch" style="margin-top:0.75rem"><input id="cfg-email-enabled" type="checkbox" /><label for="cfg-email-enabled">Manda le notifiche via email quando il portale non c'è</label></div>
+        <div class="fields" style="margin-top:0.75rem">
+          <div class="field"><label for="cfg-email-host">Server SMTP</label><input id="cfg-email-host" type="text" placeholder="smtp.miodominio.it" /></div>
+          <div class="field"><label for="cfg-email-port">Porta</label><input id="cfg-email-port" type="number" min="1" max="65535" /></div>
+          <div class="field"><label for="cfg-email-security">Sicurezza</label>
+            <select id="cfg-email-security">
+              <option value="ssl">SSL/TLS diretto (di solito porta 465)</option>
+              <option value="none">Nessuna (solo reti fidate)</option>
+            </select>
+          </div>
+          <div class="field"><label for="cfg-email-user">Utente</label><input id="cfg-email-user" type="text" autocomplete="off" placeholder="vuoto se non serve login" /></div>
+          <div class="field"><label for="cfg-email-pass">Password</label><input id="cfg-email-pass" type="password" autocomplete="new-password" placeholder="invariata" /></div>
+          <div class="field"><label for="cfg-email-from">Indirizzo mittente</label><input id="cfg-email-from" type="text" placeholder="gateway@miodominio.it" /></div>
+          <div class="field"><label for="cfg-email-fromname">Nome mittente</label><input id="cfg-email-fromname" type="text" placeholder="Sheltr ESP" /></div>
+          <div class="field"><label for="cfg-email-to">Destinatari</label><input id="cfg-email-to" type="text" placeholder="uno o più indirizzi separati da virgola" /></div>
+        </div>
+        <div class="row" style="margin-top:0.75rem">
+          <input id="email-test-to" type="text" placeholder="indirizzo per la prova (vuoto = destinatari)" style="max-width:22rem" />
+          <button id="btn-email-test" class="small">Invia prova</button>
+          <span class="muted" id="email-test-hint"></span>
+        </div>
+        <p class="muted" style="margin-top:0.5rem">Qui serve <strong>SSL/TLS diretto</strong> (porta 465): STARTTLS non è disponibile perché la libreria TLS dell'ESP32 non sa cifrare una connessione già aperta. Il certificato del server non viene verificato: il traffico è cifrato, ma conviene usare credenziali dedicate a questo dispositivo. Salva le impostazioni prima di provare l'invio.</p>
+        <dl class="kv" id="email-kv" style="margin-top:0.75rem"></dl>
+      </section>
+
+      <section class="panel">
         <h2>Manutenzione</h2>
         <div class="row">
           <button id="btn-restart">Riavvia dispositivo</button>
@@ -1714,6 +1742,17 @@
     $("cfg-bus-retries").value = config.bus.retries;
     $("cfg-bus-poll").value = config.bus.pollIntervalSec;
 
+    const email = config.email || {};
+    $("cfg-email-enabled").checked = Boolean(email.enabled);
+    $("cfg-email-host").value = email.host || "";
+    $("cfg-email-port").value = email.port || 465;
+    $("cfg-email-security").value = email.security === "none" ? "none" : "ssl";
+    $("cfg-email-user").value = email.username || "";
+    $("cfg-email-pass").value = "";
+    $("cfg-email-from").value = email.from || "";
+    $("cfg-email-fromname").value = email.fromName || "Sheltr ESP";
+    $("cfg-email-to").value = email.recipients || "";
+
     $("cfg-hostname").value = config.network.hostname || "";
     $("cfg-mdns").textContent = "http://" + (config.network.hostname || "sheltr") + ".local";
     $("cfg-eth-enabled").checked = config.network.ethEnabled;
@@ -2072,6 +2111,19 @@
     config.bus.retries = Number($("cfg-bus-retries").value);
     config.bus.pollIntervalSec = Number($("cfg-bus-poll").value);
 
+    config.email = config.email || {};
+    config.email.enabled = $("cfg-email-enabled").checked;
+    config.email.host = $("cfg-email-host").value;
+    config.email.port = Number($("cfg-email-port").value);
+    config.email.security = $("cfg-email-security").value;
+    config.email.username = $("cfg-email-user").value;
+    config.email.from = $("cfg-email-from").value;
+    config.email.fromName = $("cfg-email-fromname").value;
+    config.email.recipients = $("cfg-email-to").value;
+    // Password vuota = si tiene quella già salvata sul dispositivo.
+    if ($("cfg-email-pass").value) config.email.password = $("cfg-email-pass").value;
+    else delete config.email.password;
+
     config.network.hostname = $("cfg-hostname").value;
     config.network.ethEnabled = $("cfg-eth-enabled").checked;
     config.network.dhcp = $("cfg-dhcp").checked;
@@ -2137,6 +2189,26 @@
     updateCloudTopics();
   }
 
+  // Prova di invio: salva prima le impostazioni, così verifica quello che si vede.
+  async function testEmail() {
+    const button = $("btn-email-test");
+    const hint = $("email-test-hint");
+    button.disabled = true;
+    hint.textContent = "Invio in corso…";
+    try {
+      await saveConfig("save-system-hint");
+      const to = $("email-test-to").value.trim();
+      const data = await api("/api/system/email/test", { method: "POST", body: to ? { to } : {} });
+      hint.textContent = "Inviata a " + (data.to || "destinatari configurati");
+      toast("Email di prova inviata");
+    } catch (error) {
+      hint.textContent = "";
+      toast(error.message, true);
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   async function claimCloud() {
     const button = $("btn-cloud-claim");
     const hint = $("cloud-claim-hint");
@@ -2178,6 +2250,30 @@
     $("system-content").classList.toggle("hidden", !unlocked);
   }
 
+  // Diagnostica delle notifiche email: dice a colpo d'occhio se il gateway le sta
+  // mandando lui o se le lascia al portale.
+  function renderEmailStatus(email) {
+    const kv = $("email-kv");
+    if (!kv) return;
+    kv.innerHTML = "";
+    if (!email) return;
+    const cloudUp = state.system && state.system.mqtt && state.system.mqtt.cloud &&
+      state.system.mqtt.cloud.enabled && state.system.mqtt.cloud.connected;
+    const rows = [
+      ["Chi manda le notifiche", cloudUp ? "il portale (dispositivo collegato)"
+        : (email.configured ? "questo dispositivo" : "nessuno: completa la configurazione")],
+      ["Inviate", email.sent || 0],
+      ["Fallite", email.failed || 0],
+      ["Scartate (coda piena)", email.dropped || 0],
+      ["Ultimo invio", email.lastSentAgoMs ? formatUptime(Math.round(email.lastSentAgoMs / 1000)) + " fa" : "mai"],
+      ["Ultimo errore", email.lastError || "nessuno"],
+    ];
+    for (const [key, value] of rows) {
+      kv.appendChild(el("dt", null, key));
+      kv.appendChild(el("dd", null, String(value ?? "")));
+    }
+  }
+
   function renderSystem() {
     const system = state.system;
     const kv = $("system-kv");
@@ -2213,6 +2309,7 @@
       kv.appendChild(el("dd", null, String(value ?? "")));
     }
 
+    renderEmailStatus(system.email);
     renderPerformance(system.performance);
     renderRtcStatus(system.rtc);
     renderUpdate(system.update);
@@ -2430,6 +2527,7 @@
     $("btn-reload-config").addEventListener("click", () => loadConfig().catch((error) => toast(error.message, true)));
     $("cfg-cloud-instance").addEventListener("input", updateCloudTopics);
     $("btn-cloud-claim").addEventListener("click", claimCloud);
+    $("btn-email-test").addEventListener("click", testEmail);
     $("cfg-cloud-transport").addEventListener("change", updateCloudTransport);
 
     $("btn-scan").addEventListener("click", async () => {

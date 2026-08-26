@@ -813,6 +813,27 @@ bool applyJson(JsonObjectConst input, String &error) {
     }
   }
 
+  if (input["email"].is<JsonObjectConst>()) {
+    JsonObjectConst email = input["email"].as<JsonObjectConst>();
+    next.email.enabled = toBool(email["enabled"], next.email.enabled);
+    next.email.host = toText(email["host"], next.email.host);
+    next.email.port = constrain(toInt(email["port"], next.email.port), 1, 65535);
+    // Il dispositivo sa fare SSL/TLS diretto (di solito porta 465) oppure niente
+    // cifratura: STARTTLS richiederebbe di promuovere una connessione gia' aperta,
+    // cosa che la libreria TLS dell'ESP32 non permette.
+    const String security = toText(email["security"], next.email.security);
+    next.email.security = (security == "none") ? security : "ssl";
+    next.email.username = toText(email["username"], next.email.username);
+    // Password vuota = si tiene quella salvata (l'interfaccia non la rilegge mai).
+    if (email["password"].is<const char *>()) {
+      const String password = toText(email["password"], "");
+      if (password.length()) next.email.password = password;
+    }
+    next.email.from = toText(email["from"], next.email.from);
+    next.email.fromName = toText(email["fromName"], next.email.fromName);
+    next.email.recipients = toText(email["recipients"], next.email.recipients);
+  }
+
   if (input["roomColors"].is<JsonObjectConst>()) {
     next.roomColors.clear();
     for (JsonPairConst pair : input["roomColors"].as<JsonObjectConst>()) {
@@ -949,6 +970,18 @@ void toJson(JsonObject out, bool includeSecrets) {
   cloud["configTopic"] = current.cloud.instanceId + "/config";
   cloud["commandTopic"] = current.cloud.instanceId + "/cmd";
   cloud["responseTopic"] = current.cloud.instanceId + "/pub";
+
+  JsonObject email = out["email"].to<JsonObject>();
+  email["enabled"] = current.email.enabled;
+  email["host"] = current.email.host;
+  email["port"] = current.email.port;
+  email["security"] = current.email.security;
+  email["username"] = current.email.username;
+  email["password"] = includeSecrets ? current.email.password
+                                     : String(current.email.password.length() ? "********" : "");
+  email["from"] = current.email.from;
+  email["fromName"] = current.email.fromName;
+  email["recipients"] = current.email.recipients;
 
   JsonObject roomColors = out["roomColors"].to<JsonObject>();
   for (const auto &pair : current.roomColors) roomColors[pair.first] = pair.second;

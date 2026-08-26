@@ -186,6 +186,49 @@ supportato dal portale (anche futuro) funziona senza aggiornare il firmware. Se 
 `0x40`, il gateway ne approfitta per aggiornare anche il proprio stato interno, così interfaccia locale e
 Home Assistant restano allineati ai comandi arrivati dal cloud.
 
+## Notifiche quando il portale non c'e'
+
+Le notifiche le manda **il portale**: conosce gli indirizzi e le preferenze di ogni utente e le
+recapita via push, email e Telegram. Se pero' il gateway lavora da solo — cloud non configurato,
+oppure configurato ma irraggiungibile — e ha comunque una connessione a internet, puo' mandarle lui
+**via email**, agli indirizzi impostati in *Sistema → Notifiche email*.
+
+La regola e' una sola, cosi' non arrivano doppioni e non si resta scoperti:
+
+| Situazione | Chi manda la notifica |
+|---|---|
+| Gateway collegato a Sheltr Cloud | il portale (push, email, Telegram) |
+| Portale non configurato o irraggiungibile, ma c'e' internet | il gateway, via email |
+| Nessuna connessione a internet | nessuno (il gateway continua comunque a funzionare in locale) |
+
+Cosa fa scattare una email dal gateway: il cambio di stato di un canale con **Notifica cambio stato**
+attiva (lo stesso flag che si sincronizza col portale) e lo scatto di un **ingresso** con la notifica
+attiva, col suo testo personalizzato. I cambiamenti ravvicinati finiscono in un'unica email.
+
+### Cosa impostare
+
+*Sistema → Notifiche email*: server SMTP, porta, utente e password, indirizzo del mittente e i
+destinatari (uno o piu', separati da virgola). Il pulsante **Invia prova** salva e prova subito,
+riportando per intero l'errore del server di posta.
+
+> **Serve SSL/TLS diretto** (di solito porta 465). STARTTLS non c'e': vorrebbe dire cifrare una
+> connessione gia' aperta, e la libreria TLS dell'ESP32 non lo permette. Il certificato del server non
+> viene verificato (sul dispositivo non c'e' un archivio di autorita' da aggiornare): il traffico e'
+> cifrato, ma conviene usare credenziali dedicate a questo gateway.
+
+L'invio avviene in un task separato con una piccola coda: una sessione SMTP con TLS puo' durare
+qualche secondo e il loop principale deve restare libero per bus, web e MQTT. Se la coda si riempie la
+notifica viene scartata (meglio perderne una che bloccare il gateway) e il contatore lo segnala in
+*Sistema → Notifiche email*.
+
+Il dialogo SMTP sta in [`src/smtp_session.cpp`](../src/smtp_session.cpp), scritto senza dipendenze
+Arduino apposta: si compila sull'host e si prova contro un vero server di posta.
+
+```bash
+python3 test/fake_smtp_server.py --auth &
+g++ -std=c++17 -O2 -I src test/smtp_session_host_test.cpp src/smtp_session.cpp -o /tmp/smtp_test && /tmp/smtp_test
+```
+
 ## Diagnostica
 
 - *Sistema → Sheltr Cloud* mostra stato della connessione, ultimo errore e se la configurazione retained
