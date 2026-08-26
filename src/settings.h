@@ -143,6 +143,13 @@ struct RtcCfg {
   uint8_t address = 0x68;
 };
 
+// Aggiornamento firmware dalle release GitHub del progetto.
+struct UpdateCfg {
+  bool enabled = true;                             // controllo automatico
+  String repo = "filippobenozzi/sheltr-esp";       // <owner>/<repo>
+  uint16_t checkIntervalHours = 12;                // 0 = solo controllo manuale
+};
+
 struct MqttCfg {
   bool enabled = false;
   String host;
@@ -204,6 +211,7 @@ struct Config {
   NetworkCfg network;
   NtpCfg ntp;
   RtcCfg rtc;
+  UpdateCfg update;
   MqttCfg mqtt;
   CloudCfg cloud;
   std::map<String, String> roomColors;

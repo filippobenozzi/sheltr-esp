@@ -38,7 +38,29 @@ Per partire da una flash pulita:
 esptool.py --chip esp32s3 --port /dev/tty.usbserial-0001 erase_flash
 ```
 
-## Aggiornamento OTA
+## Aggiornamento dalle release GitHub (consigliato)
+
+Ogni push su `main` pubblica una release con i binari compilati. Se il gateway raggiunge internet, può
+aggiornarsi da solo: *Sistema → Aggiornamento firmware* mostra la versione installata e il pulsante
+**Controlla aggiornamenti**; se la release più recente è diversa da quella installata compare
+**Scarica e aggiorna**, con barra di avanzamento e riavvio automatico al termine.
+
+- Il confronto è sul **tag della release**: la CI lo incide nel binario (`SHELTR_FW_RELEASE`), quindi il
+  dispositivo sa esattamente da quale release proviene. Un firmware compilato in locale si dichiara `dev`
+  e vedrà quindi sempre un aggiornamento disponibile.
+- Il controllo automatico gira ogni 12 ore (configurabile, 0 = solo manuale) e non fa nulla se il
+  dispositivo è offline.
+- Il download scrive nella partizione OTA inattiva da un task dedicato: l'interfaccia resta raggiungibile
+  e mostra i byte scaricati. La configurazione salvata non viene toccata.
+- Il repository controllato è `filippobenozzi/sheltr-esp` ed è modificabile (campo `update.repo`), utile
+  se lavori su un fork.
+
+> La connessione a GitHub è HTTPS **senza verifica del certificato**: senza orologio sincronizzato la
+> validazione fallirebbe al primo avvio. L'integrità del binario è comunque verificata dall'ESP32 in
+> scrittura (magic byte e checksum dell'immagine), quindi un file corrotto o incompleto non viene mai
+> avviato. Se la rete non è affidabile, usa l'upload manuale del file scaricato a mano.
+
+## Aggiornamento OTA manuale
 
 Dall'interfaccia web: **Sistema → Aggiornamento firmware**, seleziona `sheltr-esp-firmware.bin`
 (**non** il file `merged`) e premi *Aggiorna*. Il dispositivo scrive la partizione OTA inattiva e si

@@ -136,6 +136,9 @@ ottenuto con la password della sezione Sistema e da passare nell'header `X-Shelt
 | `/api/system/factory-reset` | POST | `{"keepNetwork": true}` |
 | `/api/system/ota` | POST | upload multipart del firmware (`firmware=@file.bin`) |
 | `/api/frame` | POST | invio frame grezzo |
+| `/api/system/update` | GET | stato del controllo aggiornamenti |
+| `/api/system/update/check` | POST | interroga le release GitHub |
+| `/api/system/update/install` | POST | scarica e installa l'ultima release |
 | `/api/system/rtc` | POST | `{"action":"fromRtc"\|"toRtc"\|"set","time":"YYYY-MM-DDTHH:MM"}` |
 | `/api/wifi/scan` | GET | reti WiFi visibili (libera in modalità hotspot) |
 | `/api/wifi/connect` | POST | `{"ssid","password"}` (libera in modalità hotspot) |

@@ -480,7 +480,26 @@
 
       <section class="panel">
         <h2>Aggiornamento firmware</h2>
-        <p class="muted">Carica un file <span class="mono">sheltr-esp-firmware.bin</span>. Il dispositivo si riavvia al termine.</p>
+
+        <div id="update-box" style="border:2px solid var(--border);padding:0.75rem;margin-bottom:1rem">
+          <div class="row" style="justify-content:space-between">
+            <div>
+              <strong id="update-headline">Versione installata</strong>
+              <div class="muted mono" id="update-installed">—</div>
+            </div>
+            <div class="row">
+              <button id="btn-update-check" class="small">Controlla aggiornamenti</button>
+              <button id="btn-update-install" class="primary small hidden">Scarica e aggiorna</button>
+            </div>
+          </div>
+          <p class="muted" id="update-detail" style="margin:0.5rem 0 0"></p>
+          <div class="row" id="update-progress-row" style="margin-top:0.6rem;display:none">
+            <div class="bar" style="flex:1;min-width:12rem"><span id="update-bar" style="width:0%"></span></div>
+            <strong id="update-percent" style="font-variant-numeric:tabular-nums">0 %</strong>
+          </div>
+        </div>
+
+        <p class="muted">Oppure carica a mano un file <span class="mono">sheltr-esp-firmware.bin</span>. Il dispositivo si riavvia al termine.</p>
         <div class="row">
           <input id="ota-file" type="file" accept=".bin" />
           <button id="btn-ota">Aggiorna</button>
@@ -592,6 +611,7 @@
     activity: new Map(),  // id -> istante dell'ultimo comando inviato da questa pagina
     commandResult: new Map(),  // id -> sending | ok | failed (esito dell'ultimo comando)
     pendingSetpoint: new Map(),  // id termostato -> {value, timer} in attesa di invio
+    update: null,
     meta: null,
     status: null,
     config: null,
@@ -1857,6 +1877,84 @@
     });
   }
 
+  // Aggiornamento dalle release GitHub: stato, controllo e installazione.
+  function renderUpdate(update) {
+    if (!update) return;
+    state.update = update;
+
+    const installed = update.installedVersion +
+      (update.installedRelease && update.installedRelease !== "dev" ? " · " + update.installedRelease : " · build locale");
+    $("update-installed").textContent = installed;
+
+    const detail = $("update-detail");
+    const installButton = $("btn-update-install");
+    const progressRow = $("update-progress-row");
+    const downloading = update.state === "downloading";
+
+    installButton.classList.toggle("hidden", !update.available || downloading);
+    progressRow.style.display = downloading || update.state === "done" ? "flex" : "none";
+    $("btn-update-check").disabled = downloading || update.state === "checking";
+
+    if (downloading) {
+      const percent = Number(update.progress || 0);
+      $("update-bar").style.width = percent + "%";
+      $("update-percent").textContent = percent + " %";
+      $("update-headline").textContent = "Download in corso";
+      detail.textContent = "Scaricamento di " + update.latestRelease + " · " +
+        formatBytes(update.downloaded) + (update.size ? " di " + formatBytes(update.size) : "");
+      return;
+    }
+
+    if (update.state === "done") {
+      $("update-bar").style.width = "100%";
+      $("update-percent").textContent = "100 %";
+      $("update-headline").textContent = "Aggiornamento completato";
+      detail.textContent = "Riavvio in corso…";
+      return;
+    }
+
+    if (update.available) {
+      $("update-headline").textContent = "Aggiornamento disponibile";
+      detail.textContent = (update.latestName || update.latestRelease) +
+        (update.size ? " · " + formatBytes(update.size) : "") +
+        (update.notes ? " — " + update.notes : "");
+      return;
+    }
+
+    $("update-headline").textContent = "Versione installata";
+    if (update.state === "failed" && update.error) {
+      detail.textContent = "Controllo non riuscito: " + update.error;
+    } else if (update.checked) {
+      detail.textContent = "Nessun aggiornamento disponibile" +
+        (update.latestRelease ? " (ultima release: " + update.latestRelease + ")" : "");
+    } else if (!update.enabled) {
+      detail.textContent = "Controllo automatico disattivato: premi «Controlla aggiornamenti».";
+    } else {
+      detail.textContent = "Controllo non ancora eseguito.";
+    }
+  }
+
+  // Durante il download lo stato si legge spesso, così la barra avanza.
+  function pollUpdateProgress() {
+    clearTimeout(pollUpdateProgress.timer);
+    pollUpdateProgress.timer = setTimeout(async () => {
+      try {
+        const data = await api("/api/system/update");
+        renderUpdate(data.update);
+        if (data.update && data.update.state === "downloading") {
+          pollUpdateProgress();
+        } else if (data.update && data.update.state === "done") {
+          waitForReboot();
+        } else if (data.update && data.update.state === "failed" && data.update.error) {
+          toast(data.update.error, true);
+        }
+      } catch (error) {
+        // Durante il riavvio il dispositivo non risponde: ci pensa waitForReboot.
+        pollUpdateProgress();
+      }
+    }, 1000);
+  }
+
   function renderRtcStatus(rtc) {
     const kv = $("rtc-kv");
     if (!kv) return;
@@ -2117,6 +2215,7 @@
 
     renderPerformance(system.performance);
     renderRtcStatus(system.rtc);
+    renderUpdate(system.update);
 
     const busKv = $("bus-kv");
     busKv.innerHTML = "";
@@ -2479,6 +2578,39 @@
         toast(error instanceof SyntaxError ? "File JSON non valido" : error.message, true);
       } finally {
         $("btn-import").disabled = false;
+      }
+    });
+
+    $("btn-update-check").addEventListener("click", async () => {
+      $("btn-update-check").disabled = true;
+      $("update-detail").textContent = "Controllo in corso su GitHub…";
+      try {
+        const data = await api("/api/system/update/check", { method: "POST" });
+        renderUpdate(data.update);
+        toast(data.update && data.update.available
+          ? "Disponibile " + data.update.latestRelease
+          : "Il firmware è aggiornato");
+      } catch (error) {
+        toast(error.message, true);
+        $("update-detail").textContent = "Controllo non riuscito: " + error.message;
+      } finally {
+        $("btn-update-check").disabled = false;
+      }
+    });
+
+    $("btn-update-install").addEventListener("click", async () => {
+      const update = state.update || {};
+      if (!confirm("Scaricare e installare " + (update.latestRelease || "l'aggiornamento") + "?")) return;
+      $("btn-update-install").disabled = true;
+      try {
+        const data = await api("/api/system/update/install", { method: "POST" });
+        renderUpdate(data.update);
+        toast("Download avviato");
+        pollUpdateProgress();
+      } catch (error) {
+        toast(error.message, true);
+      } finally {
+        $("btn-update-install").disabled = false;
       }
     });
 

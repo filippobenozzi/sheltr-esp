@@ -38,6 +38,7 @@ Artefatti in `.pio/build/t-eth-lite-esp32s3/`:
 | `src/mqtt_bridge.{h,cpp}` | client MQTT locale (discovery HA) e client Sheltr Cloud |
 | `src/sequences.{h,cpp}` | sequencer: esecuzione a passi con attese, senza bloccare il loop |
 | `src/metrics.{h,cpp}` | statistiche di carico del task principale |
+| `src/updater.{h,cpp}` | controllo e installazione degli aggiornamenti dalle release GitHub |
 | `src/json_utils.h` | allocatore ArduinoJson su PSRAM |
 | `web/index.html` | interfaccia locale (file unico) |
 | `scripts/build_web.py` | comprime `web/index.html` e genera `src/generated/web_assets.h` |
@@ -73,10 +74,13 @@ modifica e rigenera l'header.
 `.github/workflows/build.yml`:
 
 1. **build** — compila con PlatformIO e carica gli artefatti (`firmware.bin`, `merged`, bootloader,
-   tabella partizioni).
-2. **pages** — solo su `main`: costruisce il sito (`site/` + binari + `manifest.json` con la versione) e
+   tabella partizioni). Prima di compilare incide nel binario il tag della release
+   (`SHELTR_FW_RELEASE`), che il dispositivo confronta con GitHub per gli aggiornamenti.
+2. **prerelease** — solo su `main`: pubblica la release `v<versione>-build.<numero>` con i due binari,
+   scaricabile da chiunque e usata dal dispositivo per l'auto-aggiornamento.
+3. **pages** — solo su `main`: costruisce il sito (`site/` + binari + `manifest.json` con la versione) e
    lo pubblica su GitHub Pages.
-3. **release** — sui tag `v*`: allega i binari alla release.
+4. **release** — sui tag `v*`: allega i binari alla release.
 
 Per pubblicare una nuova versione:
 

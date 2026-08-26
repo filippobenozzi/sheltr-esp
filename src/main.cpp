@@ -11,6 +11,7 @@
 #include "schedules.h"
 #include "sequences.h"
 #include "settings.h"
+#include "updater.h"
 #include "web_ui.h"
 
 void setup() {
@@ -40,6 +41,7 @@ void setup() {
 
   net::begin();
   webserver::begin();
+  updater::begin();
   mqtt::begin();
 
   Serial.printf("Interfaccia locale: http://%s.local\n", cfg::config().network.hostname.c_str());
@@ -57,6 +59,7 @@ void loop() {
   schedules::loop();
   sequences::loop();
   rtc::loop();
+  updater::loop();
 
   metrics::sample(micros() - startedAt);
   delay(2);  // lascia girare il task idle (watchdog) e le attività di rete

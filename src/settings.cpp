@@ -737,6 +737,14 @@ bool applyJson(JsonObjectConst input, String &error) {
     next.ntp.tz = toText(ntp["tz"], next.ntp.tz);
   }
 
+  if (input["update"].is<JsonObjectConst>()) {
+    JsonObjectConst update = input["update"];
+    next.update.enabled = toBool(update["enabled"], next.update.enabled);
+    next.update.repo = toText(update["repo"], next.update.repo);
+    next.update.checkIntervalHours =
+        constrain(toInt(update["checkIntervalHours"], next.update.checkIntervalHours), 0, 720);
+  }
+
   if (input["rtc"].is<JsonObjectConst>()) {
     JsonObjectConst rtc = input["rtc"];
     next.rtc.enabled = toBool(rtc["enabled"], next.rtc.enabled);
@@ -874,6 +882,11 @@ void toJson(JsonObject out, bool includeSecrets) {
   ntp["enabled"] = current.ntp.enabled;
   ntp["server"] = current.ntp.server;
   ntp["tz"] = current.ntp.tz;
+
+  JsonObject update = out["update"].to<JsonObject>();
+  update["enabled"] = current.update.enabled;
+  update["repo"] = current.update.repo;
+  update["checkIntervalHours"] = current.update.checkIntervalHours;
 
   JsonObject rtc = out["rtc"].to<JsonObject>();
   rtc["enabled"] = current.rtc.enabled;

@@ -19,6 +19,7 @@
 #include "schedules.h"
 #include "sequences.h"
 #include "settings.h"
+#include "updater.h"
 
 namespace webserver {
 
@@ -788,6 +789,37 @@ void handleInputAssign() {
   sendJson(200, doc);
 }
 
+// Aggiornamento dalle release GitHub: controllo, avvio installazione e stato.
+void handleUpdateCheck() {
+  if (!requireSystem()) return;
+  String error;
+  const bool ok = updater::check(error);
+  JsonDocument doc(&SpiRamAllocator::instance());
+  doc["ok"] = ok;
+  if (!ok) doc["error"] = error;
+  updater::statusJson(doc["update"].to<JsonObject>());
+  sendJson(ok ? 200 : 502, doc);
+}
+
+void handleUpdateInstall() {
+  if (!requireSystem()) return;
+  String error;
+  const bool ok = updater::startInstall(error);
+  JsonDocument doc(&SpiRamAllocator::instance());
+  doc["ok"] = ok;
+  if (!ok) doc["error"] = error;
+  updater::statusJson(doc["update"].to<JsonObject>());
+  sendJson(ok ? 200 : 409, doc);
+}
+
+void handleUpdateStatus() {
+  if (!requireSystem()) return;
+  JsonDocument doc(&SpiRamAllocator::instance());
+  doc["ok"] = true;
+  updater::statusJson(doc["update"].to<JsonObject>());
+  sendJson(200, doc);
+}
+
 void handleRtcAction() {
   if (!requireSystem()) return;
   JsonDocument body(&SpiRamAllocator::instance());
@@ -856,6 +888,7 @@ void systemJson(JsonObject out) {
   sequences::statusJson(out["sequencer"].to<JsonObject>());
   metrics::statusJson(out["performance"].to<JsonObject>());
   rtc::statusJson(out["rtc"].to<JsonObject>());
+  updater::statusJson(out["update"].to<JsonObject>());
   inputs::statusJson(out["inputs"].to<JsonArray>());
   out["bus"]["triggerCount"] = Bus.triggerCount();
   out["bus"]["lastTrigger"] = Bus.lastTrigger();
@@ -904,6 +937,7 @@ void handleMeta() {
   doc["id"] = cfg::config().device.id;
   doc["name"] = cfg::config().device.name;
   doc["firmware"] = SHELTR_FW_VERSION;
+  doc["release"] = updater::installedRelease();
   doc["board"] = SHELTR_BOARD_NAME;
   doc["deviceType"] = "sheltr_esp";
   doc["protocolVersion"] = "1.6";
@@ -1067,6 +1101,11 @@ void handleOtaUpload() {
       g_otaMessage = F("Sezione Sistema protetta: inserisci la password");
       return;
     }
+    if (updater::busy()) {
+      g_otaError = true;
+      g_otaMessage = F("Aggiornamento da GitHub in corso");
+      return;
+    }
     log_i("OTA: avvio aggiornamento (%s)", upload.filename.c_str());
     if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
       g_otaError = true;
@@ -1185,6 +1224,9 @@ void registerRoutes() {
   g_server.on("/api/inputs", HTTP_POST, handleInputAssign);
   g_server.on("/api/inputs", HTTP_PUT, handleInputAssign);
   g_server.on("/api/system/rtc", HTTP_POST, handleRtcAction);
+  g_server.on("/api/system/update", HTTP_GET, handleUpdateStatus);
+  g_server.on("/api/system/update/check", HTTP_POST, handleUpdateCheck);
+  g_server.on("/api/system/update/install", HTTP_POST, handleUpdateInstall);
 
   g_server.on("/api/sequences", HTTP_GET, handleSequences);
   g_server.on("/api/sequences/run", HTTP_POST, handleSequenceRun);

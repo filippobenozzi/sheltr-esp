@@ -37,8 +37,9 @@ Niente Raspberry, niente server: tutto il protocollo è implementato a livello f
 - **Profili orari** per luci, tapparelle e termostati, con orologio sincronizzato via NTP.
 - **Rete plug & play**: Ethernet W5500 in DHCP o IP statico, dominio locale `sheltr.local`, hotspot con
   captive portal al primo avvio per configurare il WiFi.
-- **Aggiornamento firmware** dall'interfaccia web (OTA) o dal browser via
-  [ESP Web Tools](https://esphome.github.io/esp-web-tools/).
+- **Aggiornamento firmware** in tre modi: il dispositivo **si aggiorna da solo dalle release GitHub**
+  (controllo automatico e pulsante «Scarica e aggiorna»), oppure caricando il file dall'interfaccia (OTA),
+  oppure dal browser via [ESP Web Tools](https://esphome.github.io/esp-web-tools/).
 
 ## Avvio rapido
 

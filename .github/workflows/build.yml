@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-latest
     outputs:
       version: ${{ steps.version.outputs.version }}
+      tag: ${{ steps.version.outputs.tag }}
     steps:
       - uses: actions/checkout@v4
 
@@ -39,16 +40,27 @@ jobs:
       - name: Installa PlatformIO
         run: pip install --upgrade platformio
 
-      - name: Versione firmware
+      - name: Versione e tag della release
         id: version
         run: |
+          BASE="$(grep -o "SHELTR_FW_VERSION='\"[^\"]*\"'" platformio.ini | head -1 | sed "s/.*'\"//;s/\"'//")"
           if [[ "${GITHUB_REF}" == refs/tags/v* ]]; then
             VERSION="${GITHUB_REF#refs/tags/v}"
+            TAG="${GITHUB_REF#refs/tags/}"
           else
-            VERSION="$(grep -o "SHELTR_FW_VERSION='\"[^\"]*\"'" platformio.ini | head -1 | sed "s/.*'\"//;s/\"'//")+${GITHUB_SHA::7}"
+            VERSION="${BASE}+${GITHUB_SHA::7}"
+            TAG="v${BASE}-build.${GITHUB_RUN_NUMBER}"
           fi
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
-          echo "Versione: ${VERSION}"
+          echo "tag=${TAG}" >> "$GITHUB_OUTPUT"
+          echo "Versione: ${VERSION} (release ${TAG})"
+
+      - name: Marca il binario con il tag della release
+        run: |
+          # Il dispositivo confronta questo tag con l'ultima release su GitHub
+          # per sapere se c'è un aggiornamento.
+          sed -i "s|SHELTR_FW_RELEASE='\"dev\"'|SHELTR_FW_RELEASE='\"${{ steps.version.outputs.tag }}\"'|" platformio.ini
+          grep SHELTR_FW_RELEASE platformio.ini
 
       - name: Compila
         run: pio run -e t-eth-lite-esp32s3
@@ -116,6 +128,43 @@ jobs:
           path: _site
       - id: deployment
         uses: actions/deploy-pages@v4
+
+  prerelease:
+    name: Pubblica la release di main
+    if: github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: firmware
+          path: dist
+
+      - name: Crea la release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.build.outputs.tag }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          # Le note vanno in un file: così non prendono l'indentazione dello YAML.
+          {
+            git log -1 --pretty=format:'%s%n%n%b'
+            printf '\n\n'
+            printf -- '- `sheltr-esp-firmware.bin`: aggiornamento OTA (il dispositivo lo scarica da solo da Sistema -> Aggiornamento firmware)\n'
+            printf -- '- `sheltr-esp-merged.bin`: immagine completa da scrivere a `0x0` (flash da seriale o da browser)\n'
+          } > notes.md
+          # La release viene ricreata se il workflow viene rilanciato sullo stesso commit.
+          gh release delete "$TAG" --yes --cleanup-tag 2>/dev/null || true
+          gh release create "$TAG" \
+            dist/sheltr-esp-firmware.bin \
+            dist/sheltr-esp-merged.bin \
+            --target "$GITHUB_SHA" \
+            --title "Sheltr ESP $VERSION" \
+            --notes-file notes.md
 
   release:
     name: Allega i binari alla release
