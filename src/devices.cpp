@@ -593,8 +593,6 @@ void statusJson(JsonObject out, bool refresh, const std::vector<uint8_t> *refres
   out["firmware"] = SHELTR_FW_VERSION;
   out["updatedAt"] = isoTimestamp();
   out["dataSaver"] = false;
-  out["commandTopic"] = current.cloud.instanceId + "/cmd";
-  out["responseTopic"] = current.cloud.instanceId + "/pub";
   out["payloadFormat"] = current.cloud.payloadFormat;
 
   JsonObject device = out["device"].to<JsonObject>();

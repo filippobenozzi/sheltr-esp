@@ -189,6 +189,8 @@
   .empty { border: 2px dashed var(--border); padding: 1.5rem; text-align: center; color: var(--muted-foreground); margin-top: 1rem; }
   .crumb { display: flex; align-items: center; gap: 0.6rem; margin-top: 1rem; }
   .crumb h2 { font-size: 1.1rem; }
+  .cloud-card { display: flex; align-items: center; justify-content: space-between; gap: 1rem; flex-wrap: wrap; border: 2px solid var(--border); padding: 0.75rem; margin-top: 0.75rem; }
+  .cloud-code { font-size: 1.5rem; font-weight: 700; letter-spacing: 0.06em; margin-top: 0.15rem; }
 </style>
 </head>
 <body>
@@ -282,18 +284,27 @@
 
     <section class="panel">
       <h2>Sheltr Cloud</h2>
-      <p class="muted">Associa il dispositivo a un'istanza del portale con un <strong>codice</strong>: broker, credenziali e ID istanza vengono configurati in automatico.</p>
+      <p class="muted">Collega il gateway al portale: comparirà fra i <strong>dispositivi in attesa</strong> e l'installatore lo aggiungerà a una casa. Nessun codice o credenziale da copiare.</p>
+      <div class="cloud-card">
+        <div>
+          <div class="muted">Codice di questo gateway</div>
+          <div class="cloud-code mono" id="cloud-code">ESP-······</div>
+        </div>
+        <span class="chip"><span class="dot" id="cloud-dot"></span><span id="cloud-state">…</span></span>
+      </div>
+      <p class="muted" id="cloud-state-hint"></p>
       <div class="fields" style="margin-top:0.5rem">
         <div class="field">
           <label for="cfg-cloud-transport">Come raggiunge il portale</label>
           <select id="cfg-cloud-transport">
-            <option value="mqtt">Rete propria (WiFi / Ethernet)</option>
+            <option value="tcp">Rete propria (WiFi / Ethernet)</option>
             <option value="usr">Modulo USR DR154 (RS485)</option>
           </select>
         </div>
+        <div class="field" id="cloud-portal-field"><label for="cfg-cloud-host">Indirizzo del portale</label><input id="cfg-cloud-host" type="text" placeholder="cloud.miodominio.it" autocomplete="off" /></div>
       </div>
       <div id="cloud-usr-panel" class="hidden">
-        <p class="muted" style="margin-top:0.5rem">Il dispositivo non ha rete propria: scrive sulla seriale e il modulo USR DR154 fa da ponte verso il portale. Il modulo va preparato con la <em>configurazione unica</em> che il portale mostra in <em>Installazione</em> (variante <em>Con Sheltr ESP</em>). Qui basta il codice di associazione.</p>
+        <p class="muted" style="margin-top:0.5rem">Il gateway non ha rete propria: scrive sulla seriale e il modulo USR DR154 lo porta al portale. Il modulo va preparato con la <em>configurazione unica</em> che il portale mostra in <em>Installazione</em> (variante <em>Con Sheltr ESP</em>). Nel portale comparirà con l'IMEI del modulo.</p>
         <div class="fields" style="margin-top:0.5rem">
           <div class="field"><label for="cfg-usr-tx">TX verso il modulo (GPIO)</label><input id="cfg-usr-tx" type="number" min="-1" max="48" /></div>
           <div class="field"><label for="cfg-usr-rx">RX dal modulo (GPIO)</label><input id="cfg-usr-rx" type="number" min="-1" max="48" /></div>
@@ -301,35 +312,17 @@
           <div class="field"><label for="cfg-usr-baud">Baud</label><input id="cfg-usr-baud" type="number" min="1200" max="921600" /></div>
         </div>
       </div>
-      <div class="fields" style="margin-top:0.5rem">
-        <div class="field" id="cloud-portal-field"><label for="cfg-cloud-portal">URL portale</label><input id="cfg-cloud-portal" type="text" placeholder="https://cloud.miodominio.it" autocomplete="off" /></div>
-        <div class="field"><label for="cfg-cloud-code">Codice di associazione</label><input id="cfg-cloud-code" type="text" placeholder="SHLTR-XXXXX-XXXXX-XXXXX" autocomplete="off" /></div>
-      </div>
       <div class="row" style="margin-top:0.5rem">
-        <button class="primary" id="btn-cloud-claim">Abbina al portale</button>
+        <button class="primary" id="btn-cloud-connect">Collega al portale</button>
+        <button id="btn-cloud-disconnect">Scollega</button>
         <span class="muted" id="cloud-claim-hint"></span>
       </div>
       <details style="margin-top:1rem">
-        <summary class="muted">Configurazione manuale (avanzata)</summary>
-      <div class="switch" style="margin-top:0.75rem"><input id="cfg-cloud-enabled" type="checkbox" /><label for="cfg-cloud-enabled">Collega questo dispositivo a un portale Sheltr Cloud</label></div>
-      <div class="fields" style="margin-top:0.75rem">
-        <div class="field"><label for="cfg-cloud-host">Broker cloud</label><input id="cfg-cloud-host" type="text" /></div>
-        <div class="field"><label for="cfg-cloud-port">Porta</label><input id="cfg-cloud-port" type="number" min="1" max="65535" /></div>
-        <div class="field"><label for="cfg-cloud-user">Utente</label><input id="cfg-cloud-user" type="text" autocomplete="off" /></div>
-        <div class="field"><label for="cfg-cloud-pass">Password</label><input id="cfg-cloud-pass" type="password" autocomplete="new-password" placeholder="invariata" /></div>
-        <div class="field"><label for="cfg-cloud-instance">ID istanza</label><input id="cfg-cloud-instance" type="text" /></div>
-        <div class="field"><label for="cfg-cloud-instance-name">Nome istanza</label><input id="cfg-cloud-instance-name" type="text" /></div>
-        <div class="field"><label for="cfg-cloud-format">Formato payload</label>
-          <select id="cfg-cloud-format">
-            <option value="frame_hex_space_crlf">frame_hex_space_crlf</option>
-            <option value="frame_hex_space">frame_hex_space</option>
-            <option value="frame_hex_compact">frame_hex_compact</option>
-            <option value="frame_hex_compact_crlf">frame_hex_compact_crlf</option>
-          </select>
+        <summary class="muted">Avanzate</summary>
+        <div class="fields" style="margin-top:0.75rem">
+          <div class="field"><label for="cfg-cloud-port">Porta del gateway dispositivi</label><input id="cfg-cloud-port" type="number" min="1" max="65535" /></div>
         </div>
-      </div>
       </details>
-      <p class="muted">Topic usati: <span class="mono" id="cfg-cloud-topics"></span></p>
     </section>
 
     <div class="row" style="margin-top:1.25rem">
@@ -744,6 +737,7 @@
       button.classList.toggle("active", button.dataset.view === view);
     }
     if (view === "config" && !state.config) loadConfig().catch((error) => toast(error.message, true));
+    if (view === "config") loadCloudStatus().catch(() => {});
     if (view === "system") {
       renderSystemGate();
       if (state.systemToken) loadSystem().catch(() => {});
@@ -1714,24 +1708,18 @@
     $("cfg-mqtt-interval").value = config.mqtt.stateIntervalSec;
     $("cfg-mqtt-discovery").checked = config.mqtt.discovery;
 
-    $("cfg-cloud-enabled").checked = config.cloud.enabled;
     $("cfg-cloud-host").value = config.cloud.host || "";
-    $("cfg-cloud-port").value = config.cloud.port;
-    $("cfg-cloud-user").value = config.cloud.username || "";
-    $("cfg-cloud-pass").value = "";
-    $("cfg-cloud-instance").value = config.cloud.instanceId || "";
-    $("cfg-cloud-instance-name").value = config.cloud.instanceName || "";
-    $("cfg-cloud-format").value = config.cloud.payloadFormat || "frame_hex_space_crlf";
-    if (!$("cfg-cloud-portal").value) $("cfg-cloud-portal").value = config.cloud.portalUrl || "";
+    $("cfg-cloud-port").value = config.cloud.port || 7700;
     $("cfg-cloud-heartbeat").value = config.cloud.heartbeatSec;
-    $("cfg-cloud-transport").value = config.cloud.transport === "usr" ? "usr" : "mqtt";
+    $("cfg-cloud-transport").value = config.cloud.transport === "usr" ? "usr" : "tcp";
+    $("cloud-code").textContent = config.cloud.code || "ESP-······";
     const usr = config.cloud.usr || {};
     $("cfg-usr-tx").value = usr.tx !== undefined ? usr.tx : 1;
     $("cfg-usr-rx").value = usr.rx !== undefined ? usr.rx : 3;
     $("cfg-usr-de").value = usr.de !== undefined ? usr.de : -1;
     $("cfg-usr-baud").value = usr.baud || 115200;
     updateCloudTransport();
-    updateCloudTopics();
+    updateCloudTransport();
 
     // sezione Sistema
     $("cfg-bus-tx").value = config.bus.tx;
@@ -2060,15 +2048,6 @@
     }
   }
 
-  function updateCloudTopics() {
-    const instance = $("cfg-cloud-instance").value || "sheltr-esp";
-    // Con il modulo USR non ci sono topic da impostare: il modulo ha la configurazione
-    // unica del portale e dentro viaggiano gli stessi sotto-topic del collegamento diretto.
-    $("cfg-cloud-topics").textContent = $("cfg-cloud-transport").value === "usr"
-      ? "nessuno da impostare: il modulo USR usa la configurazione unica del portale"
-      : instance + "/config · " + instance + "/cmd · " + instance + "/pub";
-  }
-
   function collectConfig() {
     const config = state.config;
     config.device.name = $("cfg-name").value;
@@ -2085,23 +2064,20 @@
     if ($("cfg-mqtt-pass").value) config.mqtt.password = $("cfg-mqtt-pass").value;
     else delete config.mqtt.password;
 
-    config.cloud.enabled = $("cfg-cloud-enabled").checked;
+    // Identita' e chiave le assegna il portale: non si toccano da qui.
+    delete config.cloud.instanceId;
+    delete config.cloud.key;
+    delete config.cloud.code;
     config.cloud.host = $("cfg-cloud-host").value;
-    config.cloud.port = Number($("cfg-cloud-port").value);
-    config.cloud.username = $("cfg-cloud-user").value;
-    config.cloud.instanceId = $("cfg-cloud-instance").value;
-    config.cloud.instanceName = $("cfg-cloud-instance-name").value;
-    config.cloud.payloadFormat = $("cfg-cloud-format").value;
+    config.cloud.port = Number($("cfg-cloud-port").value) || 7700;
     config.cloud.heartbeatSec = Number($("cfg-cloud-heartbeat").value);
-    config.cloud.transport = $("cfg-cloud-transport").value === "usr" ? "usr" : "mqtt";
+    config.cloud.transport = $("cfg-cloud-transport").value === "usr" ? "usr" : "tcp";
     config.cloud.usr = {
       tx: Number($("cfg-usr-tx").value),
       rx: Number($("cfg-usr-rx").value),
       de: Number($("cfg-usr-de").value),
       baud: Number($("cfg-usr-baud").value),
     };
-    if ($("cfg-cloud-pass").value) config.cloud.password = $("cfg-cloud-pass").value;
-    else delete config.cloud.password;
 
     config.bus.tx = Number($("cfg-bus-tx").value);
     config.bus.rx = Number($("cfg-bus-rx").value);
@@ -2180,13 +2156,37 @@
     }
   }
 
-  // Con il modulo USR non serve l'URL del portale (il dispositivo non naviga):
-  // il codice viaggia sul collegamento seriale.
+  // Con il modulo USR non serve l'indirizzo del portale: lo conosce il modulo.
   function updateCloudTransport() {
     const usr = $("cfg-cloud-transport").value === "usr";
     $("cloud-usr-panel").classList.toggle("hidden", !usr);
     $("cloud-portal-field").classList.toggle("hidden", usr);
-    updateCloudTopics();
+  }
+
+  // Stato del collegamento col portale, in parole: cosa sta succedendo e cosa fare.
+  function renderCloudState(cloud) {
+    if (!cloud) return;
+    $("cloud-code").textContent = cloud.code || "ESP-······";
+    const dot = $("cloud-dot");
+    const link = cloud.link || {};
+    const via = cloud.transport === "usr" ? "il modulo DR154" : (cloud.host || "il portale");
+    const states = {
+      off: ["", "Non collegato", "Scrivi l'indirizzo del portale e premi Collega."],
+      connecting: ["warn", "Collegamento…", link.lastError ? "Ultimo tentativo: " + link.lastError : "Mi collego a " + via + "…"],
+      pending: ["warn", "In attesa", "Collegato. Nel portale: Gestisci → Dispositivi → Aggiungi dispositivo, e scegli " + (cloud.code || "questo gateway") +
+        (cloud.transport === "usr" ? " (compare con l'IMEI del modulo)." : ".")],
+      paired: ["on", "Collegato", "Fa parte di \"" + (cloud.instanceName || cloud.instanceId) + "\". Le notifiche le manda il portale."],
+      denied: ["off", "Rifiutato", cloud.lastError || "Il portale ha rifiutato il collegamento."],
+    };
+    const [cls, label, hint] = states[cloud.state] || states.off;
+    dot.className = "dot" + (cls ? " " + cls : "");
+    $("cloud-state").textContent = label;
+    $("cloud-state-hint").textContent = hint;
+    $("btn-cloud-disconnect").disabled = !cloud.enabled;
+  }
+
+  async function loadCloudStatus() {
+    renderCloudState(await api("/api/cloud/status"));
   }
 
   // Prova di invio: salva prima le impostazioni, così verifica quello che si vede.
@@ -2209,36 +2209,49 @@
     }
   }
 
-  async function claimCloud() {
-    const button = $("btn-cloud-claim");
+  async function connectCloud() {
+    const button = $("btn-cloud-connect");
     const hint = $("cloud-claim-hint");
     const viaUsr = $("cfg-cloud-transport").value === "usr";
-    const portalUrl = $("cfg-cloud-portal").value.trim();
-    const code = $("cfg-cloud-code").value.trim();
-    if (!code || (!viaUsr && !portalUrl)) {
-      toast(viaUsr ? "Inserisci il codice di associazione" : "Inserisci URL portale e codice di associazione", true);
+    const host = $("cfg-cloud-host").value.trim();
+    if (!viaUsr && !host) {
+      toast("Scrivi l'indirizzo del portale", true);
       return;
     }
     button.disabled = true;
-    hint.textContent = "Associazione in corso…";
+    hint.textContent = "Collegamento…";
     try {
-      const data = await api("/api/cloud/claim", { method: "POST", body: { portalUrl, code } });
-      if (data.pending) {
-        // Il portale risponde attraverso il modulo: l'esito arriva sulla seriale.
-        hint.textContent = "Richiesta inviata attraverso il modulo USR DR154…";
-        toast("Richiesta di associazione inviata: attendi la risposta del portale");
-      } else {
-        hint.textContent = "Associato a " + (data.instanceName || data.instanceId || "portale");
-        toast("Dispositivo associato al portale");
-      }
-      $("cfg-cloud-code").value = "";
+      await api("/api/cloud/connect", {
+        method: "POST",
+        body: {
+          transport: viaUsr ? "usr" : "tcp",
+          host,
+          port: Number($("cfg-cloud-port").value) || 7700,
+          usr: {
+            tx: Number($("cfg-usr-tx").value), rx: Number($("cfg-usr-rx").value),
+            de: Number($("cfg-usr-de").value), baud: Number($("cfg-usr-baud").value),
+          },
+        },
+      });
+      hint.textContent = "";
+      toast("Collegamento avviato");
       await loadConfig();
-      await loadStatus(false);
+      setTimeout(() => loadCloudStatus().catch(() => {}), 2500);
     } catch (error) {
       hint.textContent = "";
       toast(error.message, true);
     } finally {
       button.disabled = false;
+    }
+  }
+
+  async function disconnectCloud() {
+    try {
+      await api("/api/cloud/disconnect", { method: "POST" });
+      toast("Scollegato dal portale");
+      await loadCloudStatus();
+    } catch (error) {
+      toast(error.message, true);
     }
   }
 
@@ -2295,7 +2308,7 @@
       ["WiFi", system.network.wifi.connected ? system.network.wifi.ssid + " · " + system.network.wifi.ip + " (" + system.network.wifi.rssi + " dBm)" : "non connesso"],
       ["Hotspot", system.network.accessPoint.active ? system.network.accessPoint.ssid + " · " + system.network.accessPoint.ip : "spento"],
       ["MQTT locale", system.mqtt.local.enabled ? (system.mqtt.local.connected ? "connesso a " + system.mqtt.local.host : "disconnesso · " + (system.mqtt.local.lastError || "")) : "disabilitato"],
-      ["Sheltr Cloud", system.mqtt.cloud.enabled ? (system.mqtt.cloud.connected ? "connesso a " + system.mqtt.cloud.host : "disconnesso · " + (system.mqtt.cloud.lastError || "")) : "disabilitato"],
+      ["Sheltr Cloud", system.mqtt.cloud.enabled ? ({ paired: "collegato a " + (system.mqtt.cloud.instanceName || ""), pending: "in attesa di essere aggiunto (" + system.mqtt.cloud.code + ")", denied: "rifiutato · " + (system.mqtt.cloud.lastError || "") }[system.mqtt.cloud.state] || "collegamento in corso") : "disabilitato"],
       ["Profili orari", system.schedules.appliedCount + " applicazioni"],
       ["Sequenze eseguite", system.sequencer ? system.sequencer.runCount : 0],
       ["Sequenze in corso", system.sequencer && system.sequencer.active
@@ -2525,8 +2538,8 @@
     $("btn-save").addEventListener("click", () => saveConfig("save-hint"));
     $("btn-save-system").addEventListener("click", () => saveConfig("save-system-hint"));
     $("btn-reload-config").addEventListener("click", () => loadConfig().catch((error) => toast(error.message, true)));
-    $("cfg-cloud-instance").addEventListener("input", updateCloudTopics);
-    $("btn-cloud-claim").addEventListener("click", claimCloud);
+    $("btn-cloud-connect").addEventListener("click", connectCloud);
+    $("btn-cloud-disconnect").addEventListener("click", disconnectCloud);
     $("btn-email-test").addEventListener("click", testEmail);
     $("cfg-cloud-transport").addEventListener("change", updateCloudTransport);
 
@@ -2834,6 +2847,9 @@
   setInterval(() => {
     if (state.view === "control" && !state.busy.size) loadStatus(false).catch(() => {});
   }, 4000);
+  setInterval(() => {
+    if (state.view === "config") loadCloudStatus().catch(() => {});
+  }, 3000);
   setInterval(() => {
     if (state.view === "system" && state.systemToken) loadSystem().catch(() => {});
     loadMeta().catch(() => {});

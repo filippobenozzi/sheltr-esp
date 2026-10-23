@@ -112,7 +112,6 @@ void applyDefaults(Config &target, bool keepNetwork) {
   target.bus.tx = SHELTR_BUS_TX_DEFAULT;
   target.bus.rx = SHELTR_BUS_RX_DEFAULT;
   target.bus.de = SHELTR_BUS_DE_DEFAULT;
-  target.cloud.instanceId = "sheltr-esp";
   target.cloud.instanceName = target.device.name;
   target.mqtt.clientId = String("sheltr-") + target.device.id.substring(0, 8);
   if (keepNetwork) {
@@ -473,6 +472,35 @@ String newUuid() {
   return String(buffer);
 }
 
+String deviceUid() {
+  // MAC di fabbrica (eFuse): c'e' sempre, con o senza WiFi acceso.
+  const uint64_t mac = ESP.getEfuseMac();
+  char text[13];
+  snprintf(text, sizeof(text), "%02X%02X%02X%02X%02X%02X", static_cast<uint8_t>(mac), static_cast<uint8_t>(mac >> 8),
+           static_cast<uint8_t>(mac >> 16), static_cast<uint8_t>(mac >> 24), static_cast<uint8_t>(mac >> 32),
+           static_cast<uint8_t>(mac >> 40));
+  return String(text);
+}
+
+String deviceCode() { return String("ESP-") + deviceUid().substring(6); }
+
+void parsePortalAddress(const String &value, String &host, uint16_t &port) {
+  String text = value;
+  text.trim();
+  const int scheme = text.indexOf("://");
+  if (scheme >= 0) text = text.substring(scheme + 3);
+  const int slash = text.indexOf('/');
+  if (slash >= 0) text = text.substring(0, slash);
+  const int colon = text.lastIndexOf(':');
+  if (colon > 0) {
+    const long parsed = text.substring(colon + 1).toInt();
+    if (parsed > 0 && parsed <= 65535) port = static_cast<uint16_t>(parsed);
+    text = text.substring(0, colon);
+  }
+  text.toLowerCase();
+  host = text;
+}
+
 Channel *findChannel(const String &id, Board **boardOut) {
   for (Board &board : g_config.boards) {
     for (Channel &channel : board.channels) {
@@ -778,31 +806,29 @@ bool applyJson(JsonObjectConst input, String &error) {
   if (input["cloud"].is<JsonObjectConst>()) {
     JsonObjectConst cloud = input["cloud"];
     next.cloud.enabled = toBool(cloud["enabled"], next.cloud.enabled);
-    next.cloud.host = toText(cloud["host"], next.cloud.host);
-    next.cloud.port = constrain(toInt(cloud["port"], next.cloud.port), 1, 65535);
-    next.cloud.username = toText(cloud["username"], next.cloud.username);
-    const String password = toText(cloud["password"], "");
-    if (password.length() && password != "********") next.cloud.password = password;
-    if (cloud["password"].is<const char *>() && !toText(cloud["password"], "").length()) {
-      next.cloud.password = "";
+    if (cloud["host"].is<const char *>()) {
+      parsePortalAddress(toText(cloud["host"], ""), next.cloud.host, next.cloud.port);
     }
-    next.cloud.instanceId =
-        slugify(toText(cloud["instanceId"], next.cloud.instanceId), next.device.id);
+    next.cloud.port = constrain(toInt(cloud["port"], next.cloud.port), 1, 65535);
+    // Identita' assegnata dal portale: si ripristina solo da un backup completo.
+    if (cloud["instanceId"].is<const char *>()) next.cloud.instanceId = toText(cloud["instanceId"], "");
     next.cloud.instanceName = toText(cloud["instanceName"], next.cloud.instanceName);
+    const String key = toText(cloud["key"], "");
+    if (key.length() && key != "********") next.cloud.key = key;
     String format = toText(cloud["payloadFormat"], next.cloud.payloadFormat);
     format.toLowerCase();
     if (format == "frame_hex_space" || format == "frame_hex_compact" ||
         format == "frame_hex_space_crlf" || format == "frame_hex_compact_crlf") {
       next.cloud.payloadFormat = format;
     }
-    next.cloud.portalUrl = toText(cloud["portalUrl"], next.cloud.portalUrl);
     next.cloud.settingsRevision =
         static_cast<uint32_t>(cloud["settingsRevision"] | next.cloud.settingsRevision);
     next.cloud.heartbeatSec =
         constrain(toInt(cloud["heartbeatSec"], next.cloud.heartbeatSec), 0, 3600);
     // Trasporto: rete propria oppure modulo USR DR154 sulla seriale.
-    const String transport = toText(cloud["transport"], next.cloud.transport == CloudTransport::Usr ? "usr" : "mqtt");
-    next.cloud.transport = (transport == "usr") ? CloudTransport::Usr : CloudTransport::Mqtt;
+    // ("mqtt" e' il nome che aveva la rete propria nelle versioni precedenti.)
+    const String transport = toText(cloud["transport"], next.cloud.transport == CloudTransport::Usr ? "usr" : "tcp");
+    next.cloud.transport = (transport == "usr") ? CloudTransport::Usr : CloudTransport::Tcp;
     if (cloud["usr"].is<JsonObjectConst>()) {
       JsonObjectConst usr = cloud["usr"].as<JsonObjectConst>();
       next.cloud.usr.tx = static_cast<int8_t>(constrain(toInt(usr["tx"], next.cloud.usr.tx), -1, 48));
@@ -950,26 +976,21 @@ void toJson(JsonObject out, bool includeSecrets) {
 
   JsonObject cloud = out["cloud"].to<JsonObject>();
   cloud["enabled"] = current.cloud.enabled;
+  cloud["transport"] = current.cloud.transport == CloudTransport::Usr ? "usr" : "tcp";
   cloud["host"] = current.cloud.host;
   cloud["port"] = current.cloud.port;
-  cloud["username"] = current.cloud.username;
-  cloud["password"] = includeSecrets ? current.cloud.password
-                                     : String(current.cloud.password.length() ? "********" : "");
   cloud["instanceId"] = current.cloud.instanceId;
   cloud["instanceName"] = current.cloud.instanceName;
+  cloud["key"] = includeSecrets ? current.cloud.key : String(current.cloud.key.length() ? "********" : "");
+  cloud["code"] = deviceCode();
   cloud["payloadFormat"] = current.cloud.payloadFormat;
-  cloud["portalUrl"] = current.cloud.portalUrl;
   cloud["settingsRevision"] = current.cloud.settingsRevision;
   cloud["heartbeatSec"] = current.cloud.heartbeatSec;
-  cloud["transport"] = current.cloud.transport == CloudTransport::Usr ? "usr" : "mqtt";
   JsonObject usr = cloud["usr"].to<JsonObject>();
   usr["tx"] = current.cloud.usr.tx;
   usr["rx"] = current.cloud.usr.rx;
   usr["de"] = current.cloud.usr.de;
   usr["baud"] = current.cloud.usr.baud;
-  cloud["configTopic"] = current.cloud.instanceId + "/config";
-  cloud["commandTopic"] = current.cloud.instanceId + "/cmd";
-  cloud["responseTopic"] = current.cloud.instanceId + "/pub";
 
   JsonObject email = out["email"].to<JsonObject>();
   email["enabled"] = current.email.enabled;

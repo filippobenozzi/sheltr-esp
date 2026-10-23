@@ -1,10 +1,8 @@
 #include "web_ui.h"
 
-#include <HTTPClient.h>
 #include <Update.h>
 #include <WebServer.h>
 #include <WiFi.h>
-#include <WiFiClientSecure.h>
 #include <uri/UriBraces.h>
 
 #include "bus.h"
@@ -481,141 +479,68 @@ void handlePutConfig() {
   sendJson(200, doc);
 }
 
-// Richiesta HTTP(S) verso il portale (redenzione codice). WebServer sincrono:
-// blocca il loop per la durata della chiamata (azione una tantum in fase di setup).
-bool cloudHttpPost(const String &url, const String &body, int &statusOut, String &respOut) {
-  statusOut = 0;
-  respOut = "";
-  HTTPClient http;
-  WiFiClientSecure secureClient;
-  WiFiClient plainClient;
-  bool began = false;
-  if (url.startsWith("https://")) {
-    secureClient.setInsecure();  // portale self-hosted: certificato non verificato
-    began = http.begin(secureClient, url);
-  } else {
-    began = http.begin(plainClient, url);
-  }
-  if (!began) return false;
-  http.setConnectTimeout(12000);
-  http.setTimeout(12000);
-  http.addHeader("Content-Type", "application/json");
-  const int code = http.POST(body);
-  if (code <= 0) {
-    http.end();
-    return false;  // errore di rete/connessione/TLS
-  }
-  statusOut = code;
-  respOut = http.getString();
-  http.end();
-  return true;
-}
-
-// Associazione al portale tramite codice: il dispositivo redime il codice, riceve
-// broker, credenziali e ID istanza, si configura e si ricollega. Vedi il portale
-// POST /api/provision/claim.
-void handleCloudClaim() {
+// Collegamento al portale Sheltr Cloud: basta l'indirizzo (o il modulo DR154).
+// Il gateway si presenta al portale e compare fra i dispositivi in attesa; da li'
+// l'installatore lo aggiunge a una casa. Nessun codice, nessuna credenziale.
+void handleCloudConnect() {
   if (!requireAuth()) return;
   JsonDocument body(&SpiRamAllocator::instance());
   if (!readBody(body)) return;
+  cfg::CloudCfg &cloud = cfg::config().cloud;
 
-  String portalUrl = bodyString(body, "portalUrl", cfg::config().cloud.portalUrl);
-  String code = bodyString(body, "code");
-  portalUrl.trim();
-  code.trim();
-  while (portalUrl.endsWith("/")) portalUrl.remove(portalUrl.length() - 1);
-
-  // Con il modulo USR DR154 il gateway non ha rete propria: il codice non puo'
-  // viaggiare via HTTPS, lo manda il ponte sul collegamento seriale (e insiste
-  // finche' il portale non risponde, perche' il modulo potrebbe non essere ancora
-  // collegato al broker).
-  if (cfg::config().cloud.transport == cfg::CloudTransport::Usr) {
-    if (!code.length()) {
-      sendError(400, F("Specifica il codice di associazione"));
+  const String transport = bodyString(body, "transport", cloud.transport == cfg::CloudTransport::Usr ? "usr" : "tcp");
+  cloud.transport = transport == "usr" ? cfg::CloudTransport::Usr : cfg::CloudTransport::Tcp;
+  if (cloud.transport == cfg::CloudTransport::Tcp) {
+    String host;
+    uint16_t port = cloud.port;
+    cfg::parsePortalAddress(bodyString(body, "host", cloud.host), host, port);
+    if (!host.length()) {
+      sendError(400, F("Scrivi l'indirizzo del portale"));
       return;
     }
-    cfg::config().cloud.pendingClaimCode = code;
-    cfg::config().cloud.enabled = true;
-    if (!cfg::save()) {
-      sendError(500, F("Salvataggio configurazione fallito"));
-      return;
-    }
-    mqtt::reload();
-    JsonDocument out(&SpiRamAllocator::instance());
-    out["ok"] = true;
-    out["pending"] = true;
-    out["message"] = F("Richiesta inviata al portale attraverso il modulo USR DR154");
-    sendJson(200, out);
-    return;
+    cloud.host = host;
+    cloud.port = body["port"].is<int>() ? static_cast<uint16_t>(constrain(body["port"].as<int>(), 1, 65535)) : port;
   }
-
-  if (!portalUrl.length() || !code.length()) {
-    sendError(400, F("Specifica l'URL del portale e il codice di associazione"));
-    return;
+  if (body["usr"].is<JsonObject>()) {
+    JsonObject usr = body["usr"].as<JsonObject>();
+    if (usr["tx"].is<int>()) cloud.usr.tx = static_cast<int8_t>(constrain(usr["tx"].as<int>(), -1, 48));
+    if (usr["rx"].is<int>()) cloud.usr.rx = static_cast<int8_t>(constrain(usr["rx"].as<int>(), -1, 48));
+    if (usr["de"].is<int>()) cloud.usr.de = static_cast<int8_t>(constrain(usr["de"].as<int>(), -1, 48));
+    if (usr["baud"].is<int>()) cloud.usr.baud = static_cast<uint32_t>(constrain(usr["baud"].as<int>(), 1200, 921600));
   }
-  if (!portalUrl.startsWith("http://") && !portalUrl.startsWith("https://")) {
-    portalUrl = String("https://") + portalUrl;
-  }
-
-  JsonDocument reqDoc(&SpiRamAllocator::instance());
-  reqDoc["code"] = code;
-  JsonObject dev = reqDoc["device"].to<JsonObject>();
-  dev["type"] = "sheltr_esp";
-  dev["board"] = SHELTR_BOARD_NAME;
-  dev["firmware"] = SHELTR_FW_VERSION;
-  dev["mac"] = WiFi.macAddress();
-  String reqBody;
-  serializeJson(reqDoc, reqBody);
-
-  int status = 0;
-  String respBody;
-  if (!cloudHttpPost(portalUrl + "/api/provision/claim", reqBody, status, respBody)) {
-    sendError(502, F("Portale non raggiungibile"));
-    return;
-  }
-
-  JsonDocument resp(&SpiRamAllocator::instance());
-  if (deserializeJson(resp, respBody)) {
-    sendError(502, F("Risposta del portale non valida"));
-    return;
-  }
-  if (status != 200 || !resp["ok"].as<bool>()) {
-    const String err = resp["error"].is<const char *>() ? String(resp["error"].as<const char *>())
-                                                         : String(F("Associazione non riuscita"));
-    const int code = (status == 404 || status == 429) ? status : 502;
-    sendError(code, err);
-    return;
-  }
-
-  // Riusiamo applyJson per validare (slugify ID, vincoli porta, whitelist formato).
-  JsonObjectConst mqttObj = resp["mqtt"];
-  JsonDocument cfgDoc(&SpiRamAllocator::instance());
-  JsonObject cloud = cfgDoc["cloud"].to<JsonObject>();
-  cloud["enabled"] = true;
-  cloud["host"] = mqttObj["host"].as<String>();
-  cloud["port"] = mqttObj["port"].as<int>();
-  cloud["username"] = mqttObj["username"].as<String>();
-  cloud["password"] = mqttObj["password"].as<String>();
-  cloud["instanceId"] = resp["instanceId"].as<String>();
-  cloud["instanceName"] = resp["instanceName"].as<String>();
-  cloud["payloadFormat"] = resp["payloadFormat"].as<String>();
-  cloud["portalUrl"] = portalUrl;
-
-  String applyError;
-  if (!cfg::applyJson(cfgDoc.as<JsonObjectConst>(), applyError)) {
-    sendError(400, applyError);
-    return;
-  }
+  cloud.enabled = true;
   if (!cfg::save()) {
     sendError(500, F("Salvataggio configurazione fallito"));
     return;
   }
   mqtt::reload();
-
   JsonDocument out(&SpiRamAllocator::instance());
   out["ok"] = true;
-  out["instanceId"] = cfg::config().cloud.instanceId;
-  out["instanceName"] = cfg::config().cloud.instanceName;
+  out["code"] = cfg::deviceCode();
+  sendJson(200, out);
+}
+
+// Stato del collegamento col portale (per la sezione Sheltr Cloud dell'interfaccia).
+void handleCloudStatus() {
+  if (!requireAuth()) return;
+  JsonDocument status(&SpiRamAllocator::instance());
+  mqtt::statusJson(status.to<JsonObject>());
+  JsonDocument out(&SpiRamAllocator::instance());
+  out.set(status["cloud"]);
+  sendJson(200, out);
+}
+
+// Scollega dal portale (l'abbinamento resta: ricollegandosi si torna nella stessa casa).
+void handleCloudDisconnect() {
+  if (!requireAuth()) return;
+  cfg::config().cloud.enabled = false;
+  if (!cfg::save()) {
+    sendError(500, F("Salvataggio configurazione fallito"));
+    return;
+  }
+  mqtt::reload();
+  JsonDocument out(&SpiRamAllocator::instance());
+  out["ok"] = true;
   sendJson(200, out);
 }
 
@@ -1231,7 +1156,9 @@ void registerRoutes() {
   g_server.on("/api/config", HTTP_GET, handleGetConfig);
   g_server.on("/api/config", HTTP_PUT, handlePutConfig);
   g_server.on("/api/config", HTTP_POST, handlePutConfig);
-  g_server.on("/api/cloud/claim", HTTP_POST, handleCloudClaim);
+  g_server.on("/api/cloud/status", HTTP_GET, handleCloudStatus);
+  g_server.on("/api/cloud/connect", HTTP_POST, handleCloudConnect);
+  g_server.on("/api/cloud/disconnect", HTTP_POST, handleCloudDisconnect);
 
   g_server.on("/api/status", HTTP_GET, handleStatus);
   g_server.on("/api/poll", HTTP_POST, handlePoll);

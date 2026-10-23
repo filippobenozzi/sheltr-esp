@@ -86,11 +86,14 @@ salvata.
 3. Ascolta i topic: `mosquitto_sub -t 'homeassistant/#' -v`.
 4. Se avevi entità vecchie, cancella i retained di discovery non più validi.
 
-### Il portale Sheltr Cloud non sincronizza
+### Il gateway non compare nel portale
 
-- ID istanza sul portale e sul dispositivo devono coincidere.
-- Il portale deve usare il profilo **Sheltr Mini**.
-- Verifica il retained: `mosquitto_sub -t '<istanza>/config' -v`.
+- *Configurazione → Sheltr Cloud* mostra lo stato: **Collegamento…** con l'ultimo errore vuol dire che il
+  portale non è raggiungibile (indirizzo, porta 7700 chiusa da un firewall, rete senza internet).
+- Con il modulo DR154: il modulo deve avere la configurazione unica del portale (variante *Con Sheltr
+  ESP*) e la stessa velocità seriale impostata qui (115200 di default).
+- **Rifiutato**: il portale conosce questo gateway con un'altra chiave (per esempio dopo un ripristino di
+  fabbrica). Toglilo dalla casa nel portale e aggiungilo di nuovo.
 
 ### OTA fallito
 

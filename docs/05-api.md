@@ -108,6 +108,9 @@ l'attività è recente: è il dato dietro il pallino verde dell'interfaccia.
 |---|---|---|
 | `/api/config` | GET | configurazione completa (password oscurate); con `?secrets=1` include le password ma richiede il token di sistema |
 | `/api/config` | PUT / POST | applica e salva; accetta anche documenti parziali |
+| `/api/cloud/status` | GET | stato del collegamento a Sheltr Cloud: `state` (`off`, `connecting`, `pending`, `paired`, `denied`), `code` (`ESP-XXXXXX`), casa, ultimo errore |
+| `/api/cloud/connect` | POST | `{"transport":"tcp","host":"cloud.miodominio.it"}` oppure `{"transport":"usr"}`: collega al portale |
+| `/api/cloud/disconnect` | POST | scollega (l'abbinamento resta) |
 | `/api/rooms/color` | PUT / POST | `{"room":"Cucina","color":"#d4e5f7"}` |
 
 `device.id` è l'UUID del dispositivo: viene restituito ma **ignorato in scrittura**.

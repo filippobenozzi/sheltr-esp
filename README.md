@@ -9,7 +9,7 @@
 Firmware per **LilyGO T-ETH-Lite ESP32S3** che trasforma la scheda in un **gateway locale del protocollo
 Sheltr 1.6**: parla direttamente con le schede sul bus seriale, espone un'interfaccia di controllo web
 identica a quella di [Sheltr Cloud](https://github.com/filippobenozzi/sheltr-cloud), pubblica gli accessori
-su MQTT per Home Assistant e — se serve — si collega anche al portale cloud come istanza remota.
+su MQTT per Home Assistant e — se serve — si collega anche al portale Sheltr Cloud.
 
 Niente Raspberry, niente server: tutto il protocollo è implementato a livello firmware.
 
@@ -32,8 +32,9 @@ Niente Raspberry, niente server: tutto il protocollo è implementato a livello f
   l'integrazione Home Assistant funziona puntando direttamente al dispositivo.
 - **MQTT + discovery Home Assistant**: ogni canale diventa `light`, `cover` o `climate` con
   disponibilità, attributi (`board_id`, `address`, `channel`, `room`) e pulsanti di polling.
-- **Bridge Sheltr Cloud**: pubblica la configurazione retained su `<istanza>/config`, riceve i frame su
-  `<istanza>/cmd` e rimanda la risposta del bus su `<istanza>/pub` (profilo `Sheltr Mini`).
+- **Collegamento a Sheltr Cloud** senza configurazione: si scrive l'indirizzo del portale (oppure si usa un
+  modulo USR DR154) e il gateway compare fra i dispositivi in attesa, col suo codice `ESP-XXXXXX`.
+  Un'unica connessione TCP verso il gateway del portale, niente broker né credenziali da copiare.
 - **Profili orari** per luci, tapparelle e termostati, con orologio sincronizzato via NTP.
 - **Rete plug & play**: Ethernet W5500 in DHCP o IP statico, dominio locale `sheltr.local`, hotspot con
   captive portal al primo avvio per configurare il WiFi.

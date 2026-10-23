@@ -169,7 +169,8 @@ struct MqttCfg {
 //  - CloudTransport::Mqtt: rete propria (WiFi/Ethernet), client MQTT sul dispositivo;
 //  - CloudTransport::Usr: nessuna rete propria, la connettivita' la da' un modulo
 //    USR DR154 collegato in RS485 sulla seriale, che fa da ponte verso il broker.
-enum class CloudTransport : uint8_t { Mqtt = 0, Usr = 1 };
+// Come si raggiunge il gateway TCP del portale: con la rete propria o attraverso un DR154.
+enum class CloudTransport : uint8_t { Tcp = 0, Usr = 1 };
 
 // Collegamento seriale verso il modulo USR DR154 (di default la UART0, quella dei
 // pin di programmazione GPIO1/GPIO3).
@@ -182,26 +183,24 @@ struct UsrLinkCfg {
 
 struct CloudCfg {
   bool enabled = false;
-  CloudTransport transport = CloudTransport::Mqtt;
+  CloudTransport transport = CloudTransport::Tcp;
   UsrLinkCfg usr;
+  // Indirizzo del portale (solo nome o IP) e porta del suo gateway dispositivi.
   String host;
-  uint16_t port = 1883;
-  String username;
-  String password;
-  String instanceId = "sheltr-esp";
+  uint16_t port = 7700;
+  // Assegnati dal portale quando il gateway viene aggiunto a una casa: vuoti finche'
+  // e' "in attesa". La chiave la consegna il portale una volta sola e la si presenta
+  // a ogni connessione: nessuno si puo' spacciare per questo gateway conoscendone il MAC.
+  String instanceId;
   String instanceName = "Sheltr ESP";
+  String key;
   String payloadFormat = "frame_hex_space_crlf";
-  // URL del portale usato per l'associazione tramite codice (POST /api/provision/claim).
-  String portalUrl;
   // Ultima revisione di impostazioni (preferiti/profili) applicata dal cloud: evita
-  // che un messaggio retained vecchio sovrascriva modifiche fatte dopo in locale.
+  // che un messaggio vecchio sovrascriva modifiche fatte dopo in locale.
   uint32_t settingsRevision = 0;
   // Heartbeat verso il portale: ogni quanti secondi ripubblicare lo stato delle
   // schede, così il cloud sa che il gateway è vivo. 0 = disattivato.
   uint16_t heartbeatSec = 300;
-  // Codice di associazione da redimere: con il modulo USR il gateway non ha rete
-  // propria, quindi la richiesta viaggia sul collegamento seriale invece che via HTTPS.
-  String pendingClaimCode;
 };
 
 // Notifiche via email mandate dal gateway stesso. Servono quando non c'e' il
@@ -283,5 +282,11 @@ std::vector<uint8_t> allAddresses();
 
 // Identità del dispositivo: UUID generato una sola volta, non modificabile.
 String newUuid();
+// Identificativo hardware (MAC di fabbrica, 12 cifre esadecimali) con cui il gateway si
+// presenta al portale, e il codice breve da cercare nel portale ("ESP-A1B2C3").
+String deviceUid();
+String deviceCode();
+// "https://cloud.miodominio.it:7700/x" -> host "cloud.miodominio.it", porta 7700 (se indicata).
+void parsePortalAddress(const String &value, String &host, uint16_t &port);
 
 }  // namespace cfg

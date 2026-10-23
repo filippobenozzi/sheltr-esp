@@ -3,9 +3,10 @@
 #include <Arduino.h>
 #include <ArduinoJson.h>
 
-// Due client MQTT indipendenti:
-//  - "locale": discovery Home Assistant + stati + comandi (rete di casa)
-//  - "cloud": profilo Sheltr Cloud (config retained, frame protocollo su /cmd, risposte su /pub)
+// Due collegamenti indipendenti:
+//  - MQTT "locale": discovery Home Assistant + stati + comandi (rete di casa)
+//  - Sheltr Cloud: connessione al gateway del portale (TCP diretto o via DR154, vedi
+//    cloud_link) con configurazione, frame del protocollo, stati, eventi e impostazioni
 namespace mqtt {
 
 void begin();
@@ -23,7 +24,7 @@ void publishInputEvent(size_t index);
 
 // Ripubblica subito la configurazione sul portale. Da chiamare dopo una modifica
 // locale che il cloud rispecchia (preferiti, ingressi): senza questo il portale
-// resterebbe con il retained precedente fino alla prossima riconnessione.
+// resterebbe con la configurazione precedente fino alla prossima riconnessione.
 void publishConfig();
 
 bool localConnected();

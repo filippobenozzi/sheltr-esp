@@ -35,7 +35,9 @@ Artefatti in `.pio/build/t-eth-lite-esp32s3/`:
 | `src/schedules.{h,cpp}` | profili orari luci/tapparelle/termostati |
 | `src/network.{h,cpp}` | Ethernet W5500, WiFi, hotspot + captive portal, mDNS, NTP |
 | `src/webserver.{h,cpp}` | server HTTP, API REST, autenticazione, OTA |
-| `src/mqtt_bridge.{h,cpp}` | client MQTT locale (discovery HA) e client Sheltr Cloud |
+| `src/mqtt_bridge.{h,cpp}` | client MQTT locale (discovery HA) e protocollo verso Sheltr Cloud |
+| `src/cloud_link.{h,cpp}` | collegamento col gateway del portale: TCP diretto o seriale verso il DR154 |
+| `src/link_codec.{h,cpp}` | incapsulamento dei messaggi per sotto-topic (identico al portale) |
 | `src/sequences.{h,cpp}` | sequencer: esecuzione a passi con attese, senza bloccare il loop |
 | `src/metrics.{h,cpp}` | statistiche di carico del task principale |
 | `src/updater.{h,cpp}` | controllo e installazione degli aggiornamenti dalle release GitHub |
