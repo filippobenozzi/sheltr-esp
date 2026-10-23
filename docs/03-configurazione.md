@@ -264,7 +264,7 @@ Si configura da *Sistema → Bus seriale* (sezione protetta da password).
 
 Il polling ciclico interroga tutte le schede con il comando `0x40` e tiene aggiornati interfaccia, MQTT e
 Home Assistant anche quando i comandi arrivano da pulsanti fisici. Lo stesso intervallo si imposta anche
-dal portale (*Config → istanza → Polling automatico delle schede*): il valore è uno solo e si sincronizza
+dal portale (*Gestisci → Dispositivi → il gateway → Avanzate*): il valore è uno solo e si sincronizza
 nei due sensi.
 
 ## Sicurezza

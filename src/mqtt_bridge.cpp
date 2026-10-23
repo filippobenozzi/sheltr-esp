@@ -457,6 +457,10 @@ void cloudInstanceJson(JsonObject out) {
   // Polling automatico delle schede: il portale lo mostra e lo puo' cambiare, il
   // valore resta uno solo fra dispositivo e cloud.
   out["pollIntervalSec"] = current.bus.pollIntervalSec;
+  // Fin dove sono state applicate le impostazioni del portale: se e' indietro (modifiche
+  // fatte nel portale mentre eravamo offline) il portale non importa i campi che
+  // imposta lui, e ce li rimanda.
+  out["settingsRevision"] = current.cloud.settingsRevision;
 
   JsonObject mqttInfo = out["mqtt"].to<JsonObject>();
   mqttInfo["baseTopic"] = current.cloud.instanceId;

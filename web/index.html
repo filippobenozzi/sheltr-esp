@@ -293,7 +293,7 @@
         </div>
       </div>
       <div id="cloud-usr-panel" class="hidden">
-        <p class="muted" style="margin-top:0.5rem">Il dispositivo non ha rete propria: scrive sulla seriale e il modulo USR DR154 fa da ponte verso il broker del portale. Nel modulo vanno messi broker, credenziali e i due topic che il portale mostra in <em>Config → istanza → Collegamento del gateway</em>. Qui basta il codice di associazione.</p>
+        <p class="muted" style="margin-top:0.5rem">Il dispositivo non ha rete propria: scrive sulla seriale e il modulo USR DR154 fa da ponte verso il portale. Il modulo va preparato con la <em>configurazione unica</em> che il portale mostra in <em>Installazione</em> (variante <em>Con Sheltr ESP</em>). Qui basta il codice di associazione.</p>
         <div class="fields" style="margin-top:0.5rem">
           <div class="field"><label for="cfg-usr-tx">TX verso il modulo (GPIO)</label><input id="cfg-usr-tx" type="number" min="-1" max="48" /></div>
           <div class="field"><label for="cfg-usr-rx">RX dal modulo (GPIO)</label><input id="cfg-usr-rx" type="number" min="-1" max="48" /></div>
@@ -2062,10 +2062,10 @@
 
   function updateCloudTopics() {
     const instance = $("cfg-cloud-instance").value || "sheltr-esp";
-    // Con il modulo USR i topic sono due soli: dentro viaggiano gli stessi
-    // sotto-topic del collegamento diretto (cmd, pub, config, settings, action).
+    // Con il modulo USR non ci sono topic da impostare: il modulo ha la configurazione
+    // unica del portale e dentro viaggiano gli stessi sotto-topic del collegamento diretto.
     $("cfg-cloud-topics").textContent = $("cfg-cloud-transport").value === "usr"
-      ? instance + "/link/up · " + instance + "/link/down (da impostare nel modulo USR)"
+      ? "nessuno da impostare: il modulo USR usa la configurazione unica del portale"
       : instance + "/config · " + instance + "/cmd · " + instance + "/pub";
   }
 

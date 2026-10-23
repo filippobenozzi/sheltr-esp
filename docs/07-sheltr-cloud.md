@@ -11,12 +11,13 @@ profili orari continuano a funzionare.
 
 Invece di inserire a mano broker, credenziali e ID istanza, usa un **codice di associazione**:
 
-1. Nel portale crea un'istanza di tipo **Sheltr ESP** e, in *Config → istanza → Associazione dispositivo*,
-   premi **Genera codice** (`SHLTR-XXXXX-XXXXX-XXXXX`).
+1. Nel portale: casa → **Gestisci → Dispositivi → Aggiungi dispositivo → Sheltr ESP**. Il portale mostra
+   il codice (`SHLTR-XXXXX-XXXXX-XXXXX`, vale 7 giorni).
 2. Sul dispositivo, *Configurazione → Sheltr Cloud*: inserisci l'**URL del portale** e il **codice**, poi
    premi **Abbina al portale**.
-3. Il dispositivo chiama `POST <portale>/api/provision/claim`, riceve broker, credenziali MQTT e ID
-   istanza, si configura da solo e si collega. La sua configurazione viene importata dal portale.
+3. Il dispositivo chiama `POST <portale>/api/provision/claim`, riceve broker, credenziali MQTT personali
+   (valide solo per i suoi topic) e ID, si configura da solo e si collega. Il portale importa da solo
+   schede, canali, sequenze e ingressi.
 
 L'endpoint interno del dispositivo è `POST /api/cloud/claim` con `{portalUrl, code}`.
 
@@ -24,8 +25,7 @@ L'endpoint interno del dispositivo è `POST /api/cloud/claim` con `{portalUrl, c
 
 Se il gateway non ha né Ethernet né WiFi utilizzabili, la connettività gliela può dare un
 **USR DR154** collegato in RS485 alla seriale (di default **GPIO1 = TX**, **GPIO3 = RX**): il gateway
-scrive sulla seriale, il modulo pubblica quei byte su un topic MQTT del portale e gli consegna sulla
-seriale quello che arriva dall'altro topic.
+scrive sulla seriale e il modulo porta quei byte, in TCP, al gateway del portale.
 
 In questa configurazione il gateway resta **la fonte di verità**: profili orari, sequenze, preferiti e
 ingressi li salva su filesystem e li esegue lui, anche quando il modulo non è raggiungibile. Il DR154
@@ -33,18 +33,18 @@ fa solo da trasporto.
 
 ### Cosa impostare, una volta sola
 
-1. Nel portale: *Config → istanza → Collegamento del gateway* → **Modulo USR DR154**. La pagina mostra
-   pronti da copiare broker, porta, utente, password, client id e i **due topic dell'istanza**
-   (`<istanza>/link/up` e `<istanza>/link/down`). Sono di quella casa soltanto: ogni casa ha i suoi,
-   così i dispositivi restano separati anche sullo stesso broker.
-2. Nel modulo USR: modalità **MQTT con trasmissione trasparente**, quei valori, e la seriale a
-   **115200 8N1** (o il baud che imposti anche sul gateway).
-3. Sul gateway: *Configurazione → Sheltr Cloud* → collegamento **Modulo USR DR154**, incolla il
-   **codice di associazione** e premi *Abbina al portale*.
+1. Nel modulo USR: la **configurazione unica** che il portale mostra in *Installazione*, variante
+   **Con Sheltr ESP** (TCP verso il gateway del portale, identità con l'IMEI, heartbeat, seriale
+   **115200 8N1** o il baud che imposti anche sul gateway). È la stessa per tutti i moduli: nessun
+   topic o credenziale da copiare per ogni casa.
+2. Nel portale: casa → *Gestisci → Dispositivi → Aggiungi dispositivo → Sheltr ESP*: copia il codice.
+3. Sul gateway: *Configurazione → Sheltr Cloud* → *Come raggiunge il portale*: **Modulo USR DR154**,
+   incolla il **codice di associazione** e premi *Abbina al portale*.
 
 Il codice non può viaggiare via HTTPS (il gateway non naviga): parte sul collegamento seriale e il
-gateway insiste finché il portale non risponde, perché il modulo potrebbe non essere ancora collegato
-al broker. Alla risposta il gateway impara ID e nome istanza e pubblica la propria configurazione.
+gateway insiste finché il portale non risponde, perché il modulo potrebbe non essere ancora collegato.
+Alla risposta il gateway impara ID e nome e pubblica la propria configurazione. Il portale riconosce
+da solo che dietro quel modulo c'è uno Sheltr ESP.
 
 ### Come viaggiano i messaggi
 
@@ -63,7 +63,7 @@ quindi incapsulato con il nome del **sotto-topic**, che è lo stesso del collega
   cercando il marcatore di inizio, anche se il modulo taglia o unisce i pacchetti.
 
 Il codec sta in [`src/link_codec.cpp`](../src/link_codec.cpp) e ha una gemella identica nel portale
-(`webapp/link_codec.py`): le due implementazioni producono le stesse trame byte per byte. Si verifica
+(`backend/src/Protocol/LinkCodec.php`): le due implementazioni producono le stesse trame byte per byte. Si verifica
 sull'host, senza hardware:
 
 ```bash
@@ -72,7 +72,7 @@ g++ -std=c++17 -O2 -I src test/link_codec_host_test.cpp src/link_codec.cpp -o /t
 
 > Il portale conferma ogni messaggio ricevuto (sotto-topic `ack`): è l'unico modo che ha il gateway di
 > sapere che il ponte funziona davvero, perché la seriale da sola non dice se il modulo sia collegato
-> al broker. In *Sistema → Sheltr Cloud* trovi trame inviate/ricevute, errori CRC e quanto tempo fa è
+> al portale. In *Sistema → Sheltr Cloud* trovi trame inviate/ricevute, errori CRC e quanto tempo fa è
 > arrivata l'ultima risposta.
 
 ## Configurazione manuale sul dispositivo
@@ -94,12 +94,11 @@ g++ -std=c++17 -O2 -I src test/link_codec_host_test.cpp src/link_codec.cpp -o /t
 |---|---|---|
 | `<istanza>/config` | dispositivo → portale | JSON retained con schede, canali, stanze, sequenze, ingressi e topic |
 | `<istanza>/cmd` | portale → dispositivo | frame protocollo 1.6 (binario o esadecimale) |
-| `<istanza>/settings` | portale → dispositivo | JSON retained con preferiti e profili orari impostati dal cloud |
+| `<istanza>/settings` | portale → dispositivo | JSON con preferiti, notifiche, profili, stanze e sequenze impostati dal cloud (rimandato a ogni ritorno online) |
 | `<istanza>/pub` | dispositivo → portale | frame di risposta letto dal bus |
 | `<istanza>/event` | dispositivo → portale | eventi (es. scatto di un ingresso) |
 | `<istanza>/action` | portale → dispositivo | azioni immediate (avvio/stop sequenze) |
 | `<istanza>/bridge/status` | dispositivo → portale | `online` / `offline` (Last Will) |
-| `<istanza>/link/up` · `<istanza>/link/down` | solo con modulo USR DR154 | gli stessi messaggi qui sopra, incapsulati col nome del sotto-topic |
 
 Il payload di configurazione ha la stessa forma del firmware Sheltr Mini:
 
@@ -123,26 +122,23 @@ Il payload di configurazione ha la stessa forma del firmware Sheltr Mini:
 
 ## Configurazione sul portale
 
-1. Crea una nuova istanza con lo stesso ID (`casa-demo`).
-2. Seleziona il tipo dispositivo **Sheltr Mini**: il portale imposta da solo i topic
-   `casa-demo/config`, `casa-demo/cmd`, `casa-demo/pub` e il formato `frame_hex_space_crlf`.
-3. Premi **Sincronizza Sheltr Mini**: il portale legge il retained pubblicato dal gateway e importa
-   schede, canali e stanze.
-4. Da quel momento i comandi del portale arrivano come frame su `casa-demo/cmd` e il gateway risponde su
-   `casa-demo/pub`.
+Nessuna: il portale importa la configurazione pubblicata dal gateway (schede, canali, stanze, colori,
+sequenze, ingressi, intervallo di polling) e la aggiorna a ogni nuova pubblicazione. Nomi, schede e
+sequenze si cambiano qui sul gateway; dal portale si cambiano preferiti, notifiche, profili orari,
+stanze e colori, che vengono rimandati al gateway.
 
 ## Polling automatico delle schede
 
 Il gateway interroga da solo le schede sul bus ogni *N* secondi (default **60**) per accorgersi dei
 comandi dati fuori dal portale: pulsanti a muro, altri sistemi, scenari locali. Si imposta
-indifferentemente in *Sistema → Bus → Polling automatico* sul dispositivo oppure in
-*Config → istanza → Polling automatico delle schede* sul portale: il valore è uno solo e si
-sincronizza nei due sensi (0 = disattivato).
+indifferentemente in *Sistema → Bus → Polling automatico* sul dispositivo oppure sul portale
+(*Gestisci → Dispositivi → il gateway → Avanzate → Lettura automatica delle schede*): il valore è uno
+solo e si sincronizza nei due sensi (0 = disattivato).
 
 ## Preferiti e profili orari impostati dal cloud
 
-Il portale pubblica preferiti e profili orari su **`<istanza>/settings`** (retained, QoS 1) con un
-numero di **revisione**. Il gateway li applica alla configurazione locale, **salva su filesystem** e
+Il portale pubblica preferiti e profili orari su **`<istanza>/settings`** (QoS 1, rimandati a ogni
+ritorno online del gateway) con un numero di **revisione**. Il gateway li applica alla configurazione locale, **salva su filesystem** e
 ripubblica la propria configurazione, così il portale resta allineato.
 
 - Le programmazioni le esegue **il gateway**: continuano a funzionare anche se il cloud è
@@ -168,9 +164,9 @@ interpreta. Serve a due cose:
   (`cloud.heartbeatSec`, default 300 s, 0 = disattivato): il portale sa che il gateway
   è vivo anche quando non cambia nulla.
 
-> Nel portale imposta anche *Config → istanza → Heartbeat dispositivo* con un valore
-> **non inferiore** all'intervallo qui: è quello che il portale usa per decidere se
-> mostrare il banner "Dispositivo offline".
+> Nel portale (*Gestisci → Dispositivi → il gateway → Avanzate → Heartbeat atteso*) il valore
+> deve essere **non inferiore** all'intervallo qui: senza segnali per il doppio di quel tempo il
+> portale considera il gateway offline.
 
 Alla riconnessione il gateway pubblica `online` (retained) su `<istanza>/bridge/status` **prima** di
 ripubblicare configurazione e stati. Il portale usa quel messaggio, insieme al Last Will `offline`, per
