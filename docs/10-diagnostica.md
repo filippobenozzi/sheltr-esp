@@ -90,8 +90,9 @@ salvata.
 
 - *Configurazione → Sheltr Cloud* mostra lo stato: **Collegamento…** con l'ultimo errore vuol dire che il
   portale non è raggiungibile (indirizzo, porta 7700 chiusa da un firewall, rete senza internet).
-- Con il modulo DR154: il modulo deve avere la configurazione unica del portale (variante *Con Sheltr
-  ESP*) e la stessa velocità seriale impostata qui (115200 di default).
+- Con il modulo DR154: il modulo deve avere la configurazione unica del portale e la stessa velocità
+  seriale impostata qui (9600 di default; nel portale, pagina del DR154 → *Diagnostica* → *Seriale del
+  modulo*).
 - **Rifiutato**: il portale conosce questo gateway con un'altra chiave (per esempio dopo un ripristino di
   fabbrica). Toglilo dalla casa nel portale e aggiungilo di nuovo.
 

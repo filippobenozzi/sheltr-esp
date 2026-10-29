@@ -178,7 +178,8 @@ struct UsrLinkCfg {
   int8_t tx = 1;
   int8_t rx = 3;
   int8_t de = -1;  // pin di direzione del transceiver RS485; -1 = automatico
-  uint32_t baud = 115200;
+  // Come il bus delle schede e la configurazione unica del portale: 9600 8N1.
+  uint32_t baud = 9600;
 };
 
 struct CloudCfg {

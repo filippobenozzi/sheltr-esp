@@ -31,9 +31,9 @@ Se il gateway non ha né Ethernet né WiFi utilizzabili, la connettività gliela
 **USR DR154** collegato in RS485 alla seriale (di default **GPIO1 = TX**, **GPIO3 = RX**): il gateway
 scrive sulla seriale e il modulo porta quei byte, in TCP, allo stesso gateway del portale.
 
-1. Nel modulo USR: la **configurazione unica** che il portale mostra in *Installazione*, variante
-   **Con Sheltr ESP** (seriale **115200 8N1**, o il baud che imposti anche qui). È la stessa per tutti i
-   moduli.
+1. Nel modulo USR: la **configurazione unica** del portale (*Dispositivi → Configura dispositivo → USR
+   DR154*, via USB), con la seriale a **9600 8N1** come qui (se ne cambi una, cambia anche l'altra). È la
+   stessa per tutti i moduli, che siano collegati alle schede o a uno Sheltr ESP.
 2. Sul gateway: *Come raggiunge il portale* → **Modulo USR DR154**, poi **Collega al portale**.
 3. Nel portale il gateway compare fra i dispositivi in attesa con l'**IMEI del modulo**.
 
